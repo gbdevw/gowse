@@ -50,6 +50,6 @@ The goroutine will continuously create new goroutines that will call startEngine
 
 ## Engine stop
 
-The Stop method is called by the user to stop the motor. The method returns when a stop signal is received from the motor or a timeout occurs.
+The Stop method is called by the user to stop the engine. The method returns when a stop signal is received from the engine or a timeout occurs.
 
 ![engine background shutdown](./images/wscontainer-Stop.jpg)
