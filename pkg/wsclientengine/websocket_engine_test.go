@@ -260,9 +260,7 @@ func (suite *WebsocketEngineUnitTestSuite) TestStartWithTimeoutError() {
 		Run(func(args mock.Arguments) {
 			time.Sleep(time.Duration(timeoutMs*2) * time.Millisecond)
 		}).
-		Return((*http.Response)(nil), nil).
-		// By safety, conn.Close is called on timeout
-		On("Close", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+		Return((*http.Response)(nil), nil)
 	// Create engine
 	engine, err := NewWebsocketEngine(srvUrl, connMock, clientMock, opts, nil)
 	require.NoError(suite.T(), err)
@@ -273,7 +271,6 @@ func (suite *WebsocketEngineUnitTestSuite) TestStartWithTimeoutError() {
 	require.ErrorAs(suite.T(), err, &EngineStartError{})
 	// Check on mock
 	connMock.AssertNumberOfCalls(suite.T(), "Dial", 1)
-	connMock.AssertNumberOfCalls(suite.T(), "Close", 1)
 }
 
 // # Description
@@ -445,7 +442,9 @@ func (suite *WebsocketEngineUnitTestSuite) TestRestartEngineErrorPath() {
 	}).
 		Return((*http.Response)(nil), nil).Once().
 		// Second call will return an error
-		On("Dial", mock.Anything, mock.Anything).Return((*http.Response)(nil), dialErr)
+		On("Dial", mock.Anything, mock.Anything).Return((*http.Response)(nil), dialErr).
+		// Handle close
+		On("Close", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	// Configure client OnRestartError to call cancel function
 	clientMock.
 		// First call does nothing
@@ -470,6 +469,7 @@ func (suite *WebsocketEngineUnitTestSuite) TestRestartEngineErrorPath() {
 	case <-engine.stoppedChannel:
 		// Verify mocks
 		connMock.AssertNumberOfCalls(suite.T(), "Dial", 2)
+		connMock.AssertNumberOfCalls(suite.T(), "Close", 1)
 		clientMock.AssertNumberOfCalls(suite.T(), "OnRestartError", 2)
 	default:
 		suite.FailNow("somehting should have been read on stopped channel")
