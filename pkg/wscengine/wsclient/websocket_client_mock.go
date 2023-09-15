@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync"
 
+	wsadapters "github.com/gbdevw/gowsclient/pkg/wscengine/wsadapters"
 	"github.com/stretchr/testify/mock"
-	adapters "gitlab.com/lake42/go-websocket-client/pkg/wsclientengine/adapters"
 )
 
 /*****************************************************************************/
@@ -21,7 +21,7 @@ type WebsocketClientMock struct {
 // Mocked OnOpen method
 func (mock *WebsocketClientMock) OnOpen(
 	ctx context.Context,
-	conn adapters.WebsocketConnectionAdapterInterface,
+	conn wsadapters.WebsocketConnectionAdapterInterface,
 	readMutex *sync.Mutex,
 	exit context.CancelFunc,
 	restarting bool) error {
@@ -33,12 +33,12 @@ func (mock *WebsocketClientMock) OnOpen(
 // Mocked OnMessage method
 func (mock *WebsocketClientMock) OnMessage(
 	ctx context.Context,
-	conn adapters.WebsocketConnectionAdapterInterface,
+	conn wsadapters.WebsocketConnectionAdapterInterface,
 	readMutex *sync.Mutex,
 	restart context.CancelFunc,
 	exit context.CancelFunc,
 	sessionId string,
-	msgType adapters.MessageType,
+	msgType wsadapters.MessageType,
 	msg []byte) {
 	// Call mocked method with provided args and return predefined return value if any
 	mock.Called(ctx, conn, readMutex, restart, exit, sessionId, msgType, msg)
@@ -47,7 +47,7 @@ func (mock *WebsocketClientMock) OnMessage(
 // Mocked OnReadError method
 func (mock *WebsocketClientMock) OnReadError(
 	ctx context.Context,
-	conn adapters.WebsocketConnectionAdapterInterface,
+	conn wsadapters.WebsocketConnectionAdapterInterface,
 	readMutex *sync.Mutex,
 	restart context.CancelFunc,
 	exit context.CancelFunc,
@@ -59,7 +59,7 @@ func (mock *WebsocketClientMock) OnReadError(
 // Mocked OnClose method
 func (mock *WebsocketClientMock) OnClose(
 	ctx context.Context,
-	conn adapters.WebsocketConnectionAdapterInterface,
+	conn wsadapters.WebsocketConnectionAdapterInterface,
 	readMutex *sync.Mutex,
 	closeMessage *CloseMessageDetails) *CloseMessageDetails {
 	// Call mocked method with provided args and return predefined return value if any

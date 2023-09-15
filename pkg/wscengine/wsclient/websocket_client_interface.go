@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	adapters "gitlab.com/lake42/go-websocket-client/pkg/wsclientengine/adapters"
+	adapters "github.com/gbdevw/gowsclient/pkg/wscengine/wsadapters"
 )
 
 // Structure which holds data for a websocket close message.

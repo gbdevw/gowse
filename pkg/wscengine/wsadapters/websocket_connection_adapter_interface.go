@@ -1,5 +1,5 @@
 // The package defines an interface to adapt 3rd parties websocket libraries to websocket engine.
-package adapters
+package wsadapters
 
 import (
 	"context"

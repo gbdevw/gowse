@@ -12,7 +12,7 @@ import (
 	"net/url"
 	"sync"
 
-	wsconnadapter "gitlab.com/lake42/go-websocket-client/pkg/wsclientengine/adapters"
+	wsconnadapter "github.com/gbdevw/gowsclient/pkg/wscengine/wsadapters"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"

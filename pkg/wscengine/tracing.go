@@ -1,4 +1,4 @@
-package wsclientengine
+package wscengine
 
 /*************************************************************************************************/
 /* TRACING RELATED CONSTANTS                                                                     */

@@ -1,4 +1,4 @@
-package wsclientengine
+package wscengine
 
 import (
 	"context"
@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
+	adapters "github.com/gbdevw/gowsclient/pkg/wscengine/wsadapters"
+	"github.com/gbdevw/gowsclient/pkg/wscengine/wsclient"
 	"github.com/google/uuid"
-	adapters "gitlab.com/lake42/go-websocket-client/pkg/wsclientengine/adapters"
-	"gitlab.com/lake42/go-websocket-client/pkg/wsclientengine/wsclient"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"

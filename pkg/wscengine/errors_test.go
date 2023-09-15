@@ -1,4 +1,4 @@
-package wsclientengine
+package wscengine
 
 import (
 	"fmt"

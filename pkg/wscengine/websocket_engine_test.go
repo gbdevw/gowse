@@ -1,4 +1,4 @@
-package wsclientengine
+package wscengine
 
 import (
 	"context"
@@ -10,14 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gbdevw/gowsclient/pkg/demowsserver"
+	adapters "github.com/gbdevw/gowsclient/pkg/wscengine/wsadapters"
+	wsadapternhooyr "github.com/gbdevw/gowsclient/pkg/wscengine/wsadapters/nhooyr"
+	"github.com/gbdevw/gowsclient/pkg/wscengine/wsclient"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"gitlab.com/lake42/go-websocket-client/pkg/demowsserver"
-	"gitlab.com/lake42/go-websocket-client/pkg/wsclientengine/adapters"
-	wsadapternhooyr "gitlab.com/lake42/go-websocket-client/pkg/wsclientengine/adapters/nhooyr"
-	"gitlab.com/lake42/go-websocket-client/pkg/wsclientengine/wsclient"
 	"nhooyr.io/websocket"
 )
 
