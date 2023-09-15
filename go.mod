@@ -1,6 +1,6 @@
-module gitlab.com/lake42/go-websocket-client
+module github.com/gbdevw/gowsclient
 
-go 1.19
+go 1.18
 
 require (
 	github.com/go-playground/validator/v10 v10.14.1
