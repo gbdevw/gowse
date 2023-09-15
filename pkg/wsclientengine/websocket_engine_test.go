@@ -254,6 +254,7 @@ func (suite *WebsocketEngineUnitTestSuite) TestStartWithTimeoutError() {
 	require.NoError(suite.T(), err)
 	// Create Conn & Client mocks
 	connMock := adapters.NewWebsocketConnectionAdapterInterfaceMock()
+	connMock.On("Close", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	clientMock := wsclient.NewWebsocketClientMock()
 	// Configure connMock Dial to wait enough time to trigger the timeout
 	connMock.On("Dial", mock.Anything, mock.Anything).
@@ -402,6 +403,7 @@ func (suite *WebsocketEngineUnitTestSuite) TestStopWithCanceledCtx() {
 	require.NoError(suite.T(), err)
 	// Create Conn & Client mocks
 	connMock := adapters.NewWebsocketConnectionAdapterInterfaceMock()
+	connMock.On("Close", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	clientMock := wsclient.NewWebsocketClientMock()
 	// Create engine
 	engine, err := NewWebsocketEngine(srvUrl, connMock, clientMock, nil, nil)

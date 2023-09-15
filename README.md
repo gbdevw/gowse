@@ -13,11 +13,19 @@ A callback based framework and engine to build websocket clients in Golang, insp
     - [The way the engine works, handles errors, shutdown etc... is documented here](./documentation/websocket_client_engine_operations.md)
 - **Observability**: All components are already instrumented using Opentelemetry. Users can either plug in their own TracerProvider or let libraries fallback to the global TracerProvider. User provided callbacks receive all tracing data through their context parameter. This allows users to fully trace message processing from the server back to their code.
 
-## Usage tips
+## Usage
 
-### OnOpen callback
+### Callbacks
 
-The logic contained in the OnOpen callback is executed each time the websocket container (re)connects to the server. During the OnOpen callback, the user can manually send/receive messages synchronously without the engine getting in the way. This is useful if you need to send some specific messages after connecting to the server. Once the OnOpen callback is executed, the engine will continuously read incoming messages and use the appropriate callbacks.
+Additional explanation of callbacks that need to be implemented by the websocket client endpoint can be found [here](./documentation/callbacks.md).
+
+### Engine lifecycle
+
+Additional explanation about how the engine works and interact with users provided callbacks can be found [here](./documentation/websocket_client_engine_operations.md)
+
+### Example
+
+TODO
 
 ### Request-Response over Websocket
 

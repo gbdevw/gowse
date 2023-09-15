@@ -82,14 +82,14 @@ type WebsocketClientInterface interface {
 	//
 	// # Engine behavior on exit/restart call
 	//
-	//	- No other messages will be read if restart or exit is called.
+	// 	- No other messages will be read if restart or exit is called.
 	//
-	//	- Engine will stop after OnMessage completes: OnClose callback will be called and then
-	//    connection will be closed. Depending on which function was called, engine will restart
-	//    or definitely stop.
+	//	- Engine will stop after OnMessage is completed: OnClose callback is called and then the
+	//    connection is closed. Depending on which function was called, the engine will restart or
+	//    stop for good.
 	//
-	//	- All pending messages will be dropped. User can continue reading and sending messages in
-	//    this callback and/or in OnClose callback until conditions are met to finish stopping the
+	//	- All pending messages will be discarded. The user can continue to read and send messages
+	//    in this callback and/or in the OnClose callback until conditions are met to stop the
 	//    engine and close the websocket connection.
 	OnMessage(
 		ctx context.Context,
@@ -103,20 +103,23 @@ type WebsocketClientInterface interface {
 
 	// # Description
 	//
-	// Callback called when an error occurs during a read operation. The callback is called by the
-	// engine goroutine which has encountered the error. All engine goroutines will block until
-	// callback completes. This prevent other messages and events to be processed by the engine by
-	// the time the error is handled.
+	// This callback is called each time an error is received when reading messages from the
+	// websocket server that is not caused by the connection being closed.
 	//
-	// Engine will restart after OnReadError completes if one of the following conditions is met:
-	//	- Websocket connection is closed and exit function has not been called.
-	//	- Provided restart function has been called.
+	// The callback is called by the engine goroutine that encountered the error. All engine
+	// goroutines will block until the callback is completed. This prevents other messages and
+	// events from being processed by the engine while the error is being handled.
 	//
-	// Otherwise, the engine will either continue processing messages with the same connection or
-	// shutdown if provided exit function has been called.
+	// The engine will restart after OnReadError has finished if one of the following conditions
+	// is met:
+	// - The websocket connection is closed and the Exit function has not been called.
+	// - The restart function has been called.
 	//
-	// Do not close the websocket connection manually: It will be closed automatically if needed
-	// after OnClose callback completes.
+	// Otherwise, the engine will either continue to process messages on the same connection or
+	// shut down if the exit function has been called.
+	//
+	// Do not close the websocket connection manually: It will be automatically closed if necessary
+	// after the OnClose callback has been completed.
 	//
 	// # Inputs
 	//
@@ -129,14 +132,13 @@ type WebsocketClientInterface interface {
 	//
 	// # Engine behavior on exit/restart call
 	//
-	//	- No other messages will be read if restart or exit is called.
+	//	- No other messages are read when restart or exit is called.
 	//
-	//	- Engine will stop after OnReadError completes: OnClose callback will be called and then
-	//    connection will be closed. Depending on which function was called, engine will restart
-	//    or definitely stop.
+	//	- Engine will stop after OnReadError: OnClose callback is called and then the connection is
+	//    closed. Depending on which function was called, the engine will restart or stop for good.
 	//
-	//	- All pending messages will be dropped. User can continue reading and sending messages in
-	//    this callback and/or in OnClose callback until conditions are met to finish stopping the
+	//	- All pending messages will be discarded. The user can continue to read and send messages
+	//    in this callback and/or in the OnClose callback until conditions are met to stop the
 	//    engine and close the websocket connection.
 	OnReadError(
 		ctx context.Context,
@@ -148,14 +150,14 @@ type WebsocketClientInterface interface {
 
 	// # Description
 	//
-	// Callback called when the websocket connection has been closed or is about to close following
-	// a Stop method call or a call to provided restart/exit functions. Callback is called once by
-	// the engine: engine will not exit or restart until callback completes.
+	// Callback is called when the websocket connection is closed or about to be closed after a
+	// Stop method call or a call to the provided restart/exit functions. Callback is called once
+	// by the engine: the engine will not exit or restart until the callback has been completed.
 	//
 	// Callback can return an optional CloseMessageDetails which will be used to build the close
-	// message sent to the server in case the connection has to be closed after OnClose completes.
-	//
-	// In such case, if returned value is nil, engine will use 1001 "Going Away" as close message.
+	// message sent to the server if the connection needs to be closed after OnClose has finished.
+	// In such a case, if the returned value is nil, the engine will use 1001 "Going Away" as the
+	// close message.
 	//
 	// Do not close the websocket connection here if it is still open: It will be automatically
 	// closed by the engine with a close message.
@@ -185,8 +187,8 @@ type WebsocketClientInterface interface {
 
 	// # Description
 	//
-	// Callback called in case an error has occured when engine called conn.Close method during
-	// shutdown phase.
+	// Callback called if an error occurred when the engine called the conn.Close method during
+	// the shutdown phase.
 	//
 	// # Inputs
 	//
@@ -198,7 +200,7 @@ type WebsocketClientInterface interface {
 
 	// # Description
 	//
-	// Callback called in case an error or a timeout has occured when engine tried to restart.
+	// Callback called in case an error or a timeout occured when engine tried to restart.
 	//
 	// # Inputs
 	//
