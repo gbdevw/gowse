@@ -1,4 +1,4 @@
-module github.com/gbdevw/gowsclient/pkg/wscengine
+module github.com/gbdevw/gowsclient/pkg/demowsserver
 
 go 1.21.1
 
