@@ -12,7 +12,7 @@ import (
 	"net/url"
 	"sync"
 
-	wsconnadapter "github.com/gbdevw/gowsclient/pkg/wscengine/wsadapters"
+	wsconnadapter "github.com/gbdevw/gowsclient/wscengine/wsadapters"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"

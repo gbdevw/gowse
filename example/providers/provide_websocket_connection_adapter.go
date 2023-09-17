@@ -1,8 +1,8 @@
 package providers
 
 import (
-	"github.com/gbdevw/gowsclient/pkg/wscengine/wsadapters"
-	wsadapternhooyr "github.com/gbdevw/gowsclient/pkg/wscengine/wsadapters/nhooyr"
+	"github.com/gbdevw/gowsclient/wscengine/wsadapters"
+	wsadapternhooyr "github.com/gbdevw/gowsclient/wscengine/wsadapters/nhooyr"
 	"go.opentelemetry.io/otel/trace"
 )
 

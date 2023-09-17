@@ -2,7 +2,6 @@ go 1.21.1
 
 use (
 	./example
-	./pkg
-	./pkg/demowsserver
-	./pkg/wscengine
+	./demowsserver
+	./wscengine
 )

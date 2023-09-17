@@ -1,4 +1,4 @@
-module github.com/gbdevw/gowsclient/pkg/demowsserver
+module github.com/gbdevw/gowsclient/demowsserver
 
 go 1.21.1
 

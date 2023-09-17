@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	wsadapters "github.com/gbdevw/gowsclient/pkg/wscengine/wsadapters"
+	wsadapters "github.com/gbdevw/gowsclient/wscengine/wsadapters"
 	"github.com/stretchr/testify/mock"
 )
 

@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	adapters "github.com/gbdevw/gowsclient/pkg/wscengine/wsadapters"
-	"github.com/gbdevw/gowsclient/pkg/wscengine/wsclient"
+	adapters "github.com/gbdevw/gowsclient/wscengine/wsadapters"
+	"github.com/gbdevw/gowsclient/wscengine/wsclient"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/gbdevw/gowsclient/pkg/wscengine/wsadapters"
-	"github.com/gbdevw/gowsclient/pkg/wscengine/wsclient"
+	"github.com/gbdevw/gowsclient/wscengine/wsadapters"
+	"github.com/gbdevw/gowsclient/wscengine/wsclient"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"

@@ -5,9 +5,9 @@ import (
 	"net/url"
 
 	"github.com/gbdevw/gowsclient/example/configuration"
-	"github.com/gbdevw/gowsclient/pkg/wscengine"
-	"github.com/gbdevw/gowsclient/pkg/wscengine/wsadapters"
-	"github.com/gbdevw/gowsclient/pkg/wscengine/wsclient"
+	"github.com/gbdevw/gowsclient/wscengine"
+	"github.com/gbdevw/gowsclient/wscengine/wsadapters"
+	"github.com/gbdevw/gowsclient/wscengine/wsclient"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 )

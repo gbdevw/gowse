@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	adapters "github.com/gbdevw/gowsclient/pkg/wscengine/wsadapters"
+	adapters "github.com/gbdevw/gowsclient/wscengine/wsadapters"
 )
 
 // Structure which holds data for a websocket close message.

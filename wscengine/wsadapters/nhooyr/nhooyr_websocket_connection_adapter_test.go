@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gbdevw/gowsclient/pkg/demowsserver"
-	wsconnadapter "github.com/gbdevw/gowsclient/pkg/wscengine/wsadapters"
+	"github.com/gbdevw/gowsclient/demowsserver"
+	wsconnadapter "github.com/gbdevw/gowsclient/wscengine/wsadapters"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"nhooyr.io/websocket"

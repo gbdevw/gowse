@@ -2,7 +2,7 @@ package providers
 
 import (
 	"github.com/gbdevw/gowsclient/example/client"
-	"github.com/gbdevw/gowsclient/pkg/wscengine/wsclient"
+	"github.com/gbdevw/gowsclient/wscengine/wsclient"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )

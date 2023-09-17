@@ -1,4 +1,4 @@
-module github.com/gbdevw/gowsclient/pkg/wscengine
+module github.com/gbdevw/gowsclient/wscengine
 
 go 1.18
 
