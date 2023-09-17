@@ -16,7 +16,7 @@ import (
 func ProvideTracerProvider(ctx context.Context, config configuration.Configuration) (trace.TracerProvider, error) {
 	if strings.ToLower(config.TracingEnabled) == "true" || config.TracingEnabled == "1" {
 		// Configure Jaeger exporter
-		exp, err := jaeger.New(ctx, jaeger.WithEndpoint(config.JaegerTracingBackendEndpoint))
+		exp, err := jaeger.New(ctx, jaeger.WithEndpoint(config.JaegerTracingBackendEndpoint), jaeger.WithInsecure())
 		if err != nil {
 			return nil, err
 		}
