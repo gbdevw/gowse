@@ -6,8 +6,8 @@ services:
       - WSCEX_TRACING_ENABLED=1
       - WSCEX_TRACING_JAEGER_ENDPOINT=jaeger:4318
     depends_on:
-      - jaeger
       - fuzzingserver
+      - jaeger
   jaeger:
     image: jaegertracing/all-in-one
     ports:

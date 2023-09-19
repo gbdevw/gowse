@@ -153,7 +153,7 @@ func NewWebsocketEngine(
 func (wsengine *WebsocketEngine) Start(ctx context.Context) error {
 	// Create websocket engine context & cancel function from context
 	wsengine.engineCtx, wsengine.engineStopFunc = context.WithCancel(ctx)
-	// Create span
+	// Create span to trace startup
 	ctx, span := wsengine.tracer.Start(wsengine.engineCtx, spanEngineStart,
 		trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
@@ -166,11 +166,14 @@ func (wsengine *WebsocketEngine) Start(ctx context.Context) error {
 		span.SetStatus(codes.Error, codes.Error.String())
 		return err
 	default:
-		// If enabled, create a subcontext with timeout for start operation
+		// If enabled, create a separate subcontext with timeout for start operation
+		// NOTE: This is done like this so cancelling context with timeot does not cancel
+		// child contextes sed by the running engine
+		startCtx := ctx
 		if wsengine.engineCfgOpts.OnOpenTimeoutMs > 0 {
 			var cancel context.CancelFunc
-			ctx, cancel = context.WithTimeout(
-				wsengine.engineCtx,
+			startCtx, cancel = context.WithTimeout(
+				ctx,
 				time.Duration(wsengine.engineCfgOpts.OnOpenTimeoutMs*int64(time.Millisecond)))
 			defer cancel()
 		}
@@ -193,7 +196,7 @@ func (wsengine *WebsocketEngine) Start(ctx context.Context) error {
 				span.SetStatus(codes.Ok, codes.Ok.String())
 				return nil
 			}
-		case <-ctx.Done():
+		case <-startCtx.Done():
 			// A timeout has occured or provided parent context has been canceled.
 			span.RecordError(ctx.Err())
 			span.SetStatus(codes.Error, codes.Error.String())
@@ -427,8 +430,8 @@ func (wsengine *WebsocketEngine) startEngine(
 					// Stop onOpenSpan with a OK status
 					onOpenSpan.SetStatus(codes.Ok, codes.Ok.String())
 					onOpenSpan.End()
-					// Startup finished - Create a session context from start context
-					sessionCtx, sessionCancelFunc := context.WithCancel(wsengine.engineCtx)
+					// Startup finished - Create a session context
+					sessionCtx, sessionCancelFunc := context.WithCancel(context.Background())
 					// Create a monitor all goroutines will share to ensure shutdown is called once
 					shutdownSync := &sync.Once{}
 					// Create a UUID which will identify the session
@@ -538,25 +541,26 @@ func (wsengine *WebsocketEngine) runEngine(
 				attribute.String(attrSessionId, sessionId),
 				attribute.String(attrGoroutineId, routineId),
 			))
-			span.RecordError(sessionCtx.Err())
+			span.RecordError(ctx.Err())
 			span.SetStatus(codes.Ok, codes.Ok.String())
 			span.End()
 			return
 		default:
 			// Read message
-			msgType, msg, err := wsengine.conn.Read(sessionCtx)
+			msgType, msg, err := wsengine.conn.Read(ctx)
 			select {
-			case <-sessionCtx.Done():
-				// Session has been canceled - Call once shutdownEngine
+			case <-wsengine.engineCtx.Done():
+				// Engine has been canceled - Call once shutdownEngine
 				shutdownSync.Do(func() { wsengine.shutdownEngine(ctx, nil, false) })
 				// Unlock read mutex - All other engine goroutines will exit
 				wsengine.readMutex.Unlock()
 				// Exit
+				span.AddEvent("weird")
 				span.AddEvent(eventEngineGoroutineExit, trace.WithAttributes(
 					attribute.String(attrSessionId, sessionId),
 					attribute.String(attrGoroutineId, routineId),
 				))
-				span.RecordError(sessionCtx.Err())
+				span.RecordError(ctx.Err())
 				span.SetStatus(codes.Ok, codes.Ok.String())
 				span.End()
 				return
@@ -741,7 +745,7 @@ func (wsengine *WebsocketEngine) shutdownEngine(
 		default:
 			// Create a separate goroutine which will restart the engine. This goroutine will exit
 			// and finish the shutdown phase.
-			go wsengine.restartEngine(wsengine.engineCtx, wsengine.stoppedChannel, wsengine.engineStopFunc)
+			go wsengine.restartEngine(ctx, wsengine.stoppedChannel, wsengine.engineStopFunc)
 		}
 	} else {
 		// Send signal on stopped channel -> the engine has finished stopping
@@ -767,11 +771,11 @@ func (wsengine *WebsocketEngine) restartEngine(
 	retryCount := 0
 	for {
 		select {
-		case <-ctx.Done():
+		case <-wsengine.engineCtx.Done():
 			// Send signal on stopped channel as the engine will definitly stop
 			stoppedChannel <- true
 			// Exit
-			span.RecordError(ctx.Err())
+			span.RecordError(wsengine.engineCtx.Err())
 			span.AddEvent(eventEngineExit)
 			span.SetStatus(codes.Ok, codes.Ok.String())
 			return
@@ -796,7 +800,7 @@ func (wsengine *WebsocketEngine) restartEngine(
 			// Create internal channel to wait for the engine start completion signal
 			startupChannel := make(chan error, 1)
 			// Start a goroutine that will kick off the websocket engine.
-			go wsengine.startEngine(timeoutCtx, true, startupChannel, exit)
+			go wsengine.startEngine(ctx, true, startupChannel, exit)
 			// Read from error channel or context done channel to know when the engine has finished
 			// starting or if a timeout has occured or if engine context has been canceled.
 			var err error

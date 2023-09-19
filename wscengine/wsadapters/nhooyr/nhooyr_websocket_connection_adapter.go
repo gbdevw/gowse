@@ -303,7 +303,7 @@ func (adapter *NhooyrWebsocketConnectionAdapter) Read(ctx context.Context) (wsco
 				select {
 				case <-ctx.Done():
 					// Return context error
-					return -1, nil, err
+					return -1, nil, ctx.Err()
 				default:
 					// Check if error is due to connection being closed
 					if websocket.CloseStatus(err) != -1 || errors.Is(err, io.EOF) {

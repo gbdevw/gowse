@@ -1,5 +1,7 @@
 package wscengine
 
+import "fmt"
+
 /*************************************************************************************************/
 /* ENGINE START ERROR                                                                            */
 /*************************************************************************************************/
@@ -11,7 +13,7 @@ type EngineStartError struct {
 }
 
 func (err EngineStartError) Error() string {
-	return "websocket engine failed to start"
+	return fmt.Sprintf("websocket engine failed to start: %s", err.Err.Error())
 }
 
 func (err EngineStartError) Unwrap() error {
