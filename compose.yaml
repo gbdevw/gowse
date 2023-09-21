@@ -2,20 +2,13 @@ services:
   client:
     build: .
     environment:
-      - WSCEX_SERVER_URL=ws://fuzzingserver:9001
+      - WSCEX_SERVER_URL=ws://localhost:8080
       - WSCEX_TRACING_ENABLED=1
       - WSCEX_TRACING_JAEGER_ENDPOINT=jaeger:4318
     depends_on:
-      - fuzzingserver
       - jaeger
   jaeger:
     image: jaegertracing/all-in-one
     ports:
       - "16686:16686"
       - "4318:4318"
-  fuzzingserver:
-    image: crossbario/autobahn-testsuite
-    ports:
-      - "9001:9001"
-    volumes:
-      - ${PWD}/fuzzingserver.json:/config/fuzzingserver.json

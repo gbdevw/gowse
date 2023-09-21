@@ -14,7 +14,8 @@ func main() {
 		fx.Provide(providers.ProvideTracerProvider),
 		fx.Provide(providers.ProviderWebsocketConnectionAdapter),
 		fx.Provide(providers.ProvideWebsocketClient),
-		// Use invoke to force dependency to be isntanciated and hooks to be registered and execuuted
+		// Use invoke to force dependency to be isntanciated and hooks to be registered and executed
+		fx.Invoke(providers.ProvideWebsocketServer), // Provide the server first so its starts and stop before the engine
 		fx.Invoke(providers.ProvideWebsocketClienEngine),
 	).Run()
 }
