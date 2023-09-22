@@ -7,9 +7,9 @@ package wscengine
 // Constants used for tracing purpose.
 const (
 	// Package name used by library tracer
-	pkgName = "wscengine"
+	PkgName = "wscengine"
 	// Package version
-	pkgVersion = "0.0.0"
+	PkgVersion = "0.0.0"
 
 	// Namespace used by spans, events and attributes
 	namespace = "wscengine"

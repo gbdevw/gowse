@@ -7,29 +7,28 @@ import (
 	"net/url"
 )
 
-// Adapter which describes methods and behaviour expected by the websocket engine from the
-// underlying websocket connection library.
+// Interface which describes the adapter methods and behaviour that the websocket engine expects
+// from the underlying websocket connection library.
 //
-// Adapters are assumed to be tread-safe. Thread-safety must be ensured either by the adapter
-// implementation or by the underlying websocket connection library. implementations or underlying websocket
+// Adapters are assumed to be thread-safe. Thread safety must be ensured either by the adapter
+// implementation or by the underlying websocket connection library.
 type WebsocketConnectionAdapterInterface interface {
 	// # Description
 	//
-	// Dial open a connection to the websocket server, performs a WebSocket handshake on url and
-	// keep internally the underlying websocket connection for further use.
+	// Dial opens a connection to the websocket server and performs a WebSocket handshake.
 	//
 	// # Expected behaviour
 	//
-	//	- Dial MUST block until websocket handshake completes. Websocket handshake and TLS must be
-	//    handled seamlessly either by the adapter implementation or by the underlying websocket
+	//	- Dial MUST block until websocket handshake is complete. Websocket handshake and TLS must
+	//	  be handled seamlessly either by the adapter implementation or by the underlying websocket
 	//    library.
 	//
-	//	- Dial MUST NOT return the undelrying websocket connection. The undelrying websocket
+	//	- Dial MUST NOT return the underlying websocket connection. The undelrying websocket
 	//    connection must be kept internally by the adapter implementation in order to be used
-	//    later by Read, Write, ...
+	//    later by other adapter methods.
 	//
-	//	- Dial SHOULD close any previous opened connection if called again and MUST drop any
-	//    previous connection. Connection closure must be seamless.
+	//	- Dial MUST return an error in case a connection has already been established and Close
+	//	  method has not been called yet.
 	//
 	// # Inputs
 	//
@@ -38,9 +37,8 @@ type WebsocketConnectionAdapterInterface interface {
 	//
 	// # Returns
 	//
-	//	- Server response to websocket handshake
-	//	- error if any
-	Dial(ctx context.Context, target *url.URL) (*http.Response, error)
+	// The server response to websocket handshake or an error if any.
+	Dial(ctx context.Context, target url.URL) (*http.Response, error)
 	// # Description
 	//
 	// Send a close message with the provided status code and an optional close reason and close
@@ -50,7 +48,6 @@ type WebsocketConnectionAdapterInterface interface {
 	//
 	//	- Close MUST be blocking until close message has been sent to the server.
 	//	- Close MUST drop pending write/read messages.
-	//	- Close MUST close the connection even if provided context is already canceled.
 	//	- Close MUST return a (wrapped) net.ErrClosed error in case connection is already closed.
 	//
 	// # Inputs

@@ -259,7 +259,7 @@ func (suite *NhooyrWebsocketConnectionAdapterTestSuite) TestMethodsErrorWhenSrvH
 //   - Adapter can close the connection to the server
 func (suite *NhooyrWebsocketConnectionAdapterTestSuite) TestReadAndWrite() {
 	// Create adapter
-	adapter := NewNhooyrWebsocketConnectionAdapter(nil, nil)
+	adapter := NewNhooyrWebsocketConnectionAdapter(nil)
 	// Connect to the server
 	_, err := adapter.Dial(context.Background(), suite.srvUrl)
 	require.NoError(suite.T(), err)
@@ -350,11 +350,11 @@ func (suite *NhooyrWebsocketConnectionAdapterTestSuite) TestMsgTypeConverters() 
 // Test if connection is automatically closed when provided context is canceled.
 func (suite *NhooyrWebsocketConnectionAdapterTestSuite) TestClosureOnCtxCanceled() {
 	// Create adapter
-	adapter := NewNhooyrWebsocketConnectionAdapter(nil, nil)
+	adapter := NewNhooyrWebsocketConnectionAdapter(nil)
 	// Create cancelable context
 	ctx, cancel := context.WithCancel(context.Background())
 	// Connect to the server
-	_, err := adapter.Dial(ctx, suite.srvUrl)
+	_, err := adapter.Dial(ctx, *suite.srvUrl)
 	require.NoError(suite.T(), err)
 	// Ping
 	native := adapter.GetUnderlyingWebsocketConnection().(*websocket.Conn)

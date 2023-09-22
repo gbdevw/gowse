@@ -13,10 +13,6 @@ import (
 	"sync"
 
 	wsconnadapter "github.com/gbdevw/gowsclient/wscengine/wsadapters"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 	"nhooyr.io/websocket"
 )
 
@@ -28,8 +24,6 @@ type NhooyrWebsocketConnectionAdapter struct {
 	opts *websocket.DialOptions
 	// Internal mutex
 	mu sync.Mutex
-	// Tracer
-	tracer trace.Tracer
 }
 
 // # Description
@@ -39,42 +33,34 @@ type NhooyrWebsocketConnectionAdapter struct {
 // # Inputs
 //
 //   - opts: Optional dial options to use when calling Dial method. Can be nil.
-//   - tracerProvider: optional tracer provider to use to get a tracer. If nil, global tracer provider will be used as instead.
 //
 // # Returns
 //
 // New NhooyrWebsocketConnectionAdapter
-func NewNhooyrWebsocketConnectionAdapter(opts *websocket.DialOptions, tracerProvider trace.TracerProvider) *NhooyrWebsocketConnectionAdapter {
-	if tracerProvider == nil {
-		// Get global tracer provider if none is provided
-		tracerProvider = otel.GetTracerProvider()
-	}
+func NewNhooyrWebsocketConnectionAdapter(opts *websocket.DialOptions) *NhooyrWebsocketConnectionAdapter {
 	return &NhooyrWebsocketConnectionAdapter{
-		conn:   nil,
-		opts:   opts,
-		mu:     sync.Mutex{},
-		tracer: tracerProvider.Tracer(packageName, trace.WithInstrumentationVersion(packageVersion)),
+		conn: nil,
+		opts: opts,
+		mu:   sync.Mutex{},
 	}
 }
 
 // # Description
 //
-// Dial open a connection to the websocket server, performs a WebSocket handshake on url and
-// keep internally the underlying websocket connection for further use.
+// Dial opens a connection to the websocket server and performs a WebSocket handshake.
 //
 // # Expected behaviour
 //
-//   - Dial MUST block until websocket handshake completes. Websocket handshake and TLS must be
-//     handled seamlessly either by the adapter implementation or by the underlying websocket
+//   - Dial MUST block until websocket handshake is complete. Websocket handshake and TLS must
+//     be handled seamlessly either by the adapter implementation or by the underlying websocket
 //     library.
 //
-//   - Dial MUST NOT return the undelrying websocket connection. The undelrying websocket
+//   - Dial MUST NOT return the underlying websocket connection. The undelrying websocket
 //     connection must be kept internally by the adapter implementation in order to be used
-//     later by Read, Write, ...
+//     later by other adapter methods.
 //
-//   - Dial MUST return an error if called while there is already an alive connection. It is up
-//     to the adapter implementation or to the underlying websocket library to detect whether a
-//     connection is already alive or not.
+//   - Dial MUST return an error in case a connection has already been established and Close
+//     method has not been called yet.
 //
 // # Inputs
 //
@@ -83,9 +69,8 @@ func NewNhooyrWebsocketConnectionAdapter(opts *websocket.DialOptions, tracerProv
 //
 // # Returns
 //
-//   - Server response to websocket handshake
-//   - error if any
-func (adapter *NhooyrWebsocketConnectionAdapter) Dial(ctx context.Context, target *url.URL) (*http.Response, error) {
+// The server response to websocket handshake or an error if any.
+func (adapter *NhooyrWebsocketConnectionAdapter) Dial(ctx context.Context, target url.URL) (*http.Response, error) {
 	select {
 	case <-ctx.Done():
 		// Shortcut if context is done (timeout/cancel)
@@ -94,37 +79,19 @@ func (adapter *NhooyrWebsocketConnectionAdapter) Dial(ctx context.Context, targe
 		// Lock internal mutex before accessing internal state
 		adapter.mu.Lock()
 		defer adapter.mu.Unlock()
-		// Start Dial span
-		ctx, span := adapter.tracer.Start(ctx, dialSpan, trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(
-			attribute.String(dialSpanUrlAttr, target.String()),
-		))
-		defer span.End()
 		// Check whether there is already a connection set
 		if adapter.conn != nil {
-			// Start span for close
-			code := websocket.StatusGoingAway
-			_, spanClose := adapter.tracer.Start(ctx, dialCloseSpan, trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(
-				attribute.Int(dialCloseSpanCodeAttr, int(code)),
-			))
-			// Close and drop previous connection
-			err := adapter.conn.Close(code, "")
-			adapter.conn = nil
-			// Record error if any and close span
-			spanClose.RecordError(err)
-			spanClose.SetStatus(codes.Ok, codes.Ok.String())
-			spanClose.End()
+			// Return error in case a connection has already been set
+			return nil, fmt.Errorf("a connection has already been established")
 		}
 		// Open websocket connection
 		conn, res, err := websocket.Dial(ctx, target.String(), adapter.opts)
 		if err != nil {
-			// Trace and return error
-			span.RecordError(err)
-			span.SetStatus(codes.Error, codes.Error.String())
-			return nil, err
+			// Return response and error
+			return res, err
 		}
 		// Persist connection internally and return
 		adapter.conn = conn
-		span.SetStatus(codes.Ok, codes.Ok.String())
 		return res, nil
 	}
 }
@@ -138,7 +105,7 @@ func (adapter *NhooyrWebsocketConnectionAdapter) Dial(ctx context.Context, targe
 //
 //   - Close MUST be blocking until close message has been sent to the server.
 //   - Close MUST drop pending write/read messages.
-//   - Close MUST close the connection even if provided context is already canceled.
+//   - Close MUST return a (wrapped) net.ErrClosed error in case connection is already closed.
 //
 // # Inputs
 //
@@ -151,41 +118,26 @@ func (adapter *NhooyrWebsocketConnectionAdapter) Dial(ctx context.Context, targe
 //   - nil in case of success
 //   - error: server unreachable, connection already closed, ...
 func (adapter *NhooyrWebsocketConnectionAdapter) Close(ctx context.Context, code wsconnadapter.StatusCode, reason string) error {
-
 	// Lock internal mutex before accessing internal state
 	adapter.mu.Lock()
 	defer adapter.mu.Unlock()
-	// Start span
-	_, span := adapter.tracer.Start(ctx, closeSpan, trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(
-		attribute.Int(closeSpanCodeAttr, int(code)),
-	))
-	defer span.End()
 	// Check whether there is already a connection set
-	if adapter.conn != nil {
-		err := adapter.conn.Close(convertToNhooyrStatusCodes(code), reason)
-		// Void connection
-		adapter.conn = nil
-		// Check error
-		if err != nil {
-			if err.Error() == "failed to close WebSocket: already wrote close" {
-				// Change to an error which wraps a net.ErrClosed
-				err = fmt.Errorf("failed to close WebSocket: %w", net.ErrClosed)
-			}
-			// Trace error
-			span.RecordError(err)
-			span.SetStatus(codes.Error, codes.Error.String())
-			return err
-		} else {
-			span.SetStatus(codes.Ok, codes.Ok.String())
-			return nil
-		}
-	} else {
-		// No connection is set -> trace & return error
-		err := fmt.Errorf("close failed because no connection is already up")
-		span.RecordError(err)
-		span.SetStatus(codes.Error, codes.Error.String())
-		return err
+	if adapter.conn == nil {
+		return fmt.Errorf("close failed because no connection is already up")
 	}
+	// Close connection
+	err := adapter.conn.Close(convertToNhooyrStatusCodes(code), reason)
+	// Void connection in any case
+	adapter.conn = nil
+	// Check error
+	if err != nil {
+		if err.Error() == "failed to close WebSocket: already wrote close" {
+			// Change to an error which wraps a net.ErrClosed
+			err = fmt.Errorf("failed to close WebSocket: %w", net.ErrClosed)
+		}
+	}
+	// Return result
+	return err
 }
 
 // # Description
@@ -198,8 +150,10 @@ func (adapter *NhooyrWebsocketConnectionAdapter) Close(ctx context.Context, code
 //     or until Ping message is sent and a Pong response is somehow detected either by the
 //     adapter implementation or by the underlying websocket connection library.
 //
-//   - It can be assumed that there will be at least one concurrent goroutine which continuously
-//     call Read method.
+//   - It CANNOT be assumed that there will be at least one concurrent goroutine which continuously
+//     call Read method. In case the underlying websocket library requires to have a concurrent
+//     goroutine continuously reading in order for Ping to complete, it is up to either the
+//     adapter or to the final user to ensure there is a concurrent goroutine reading.
 //
 //   - Ping MUST return an error if connection is closed, if server is unreachable or if context
 //     has expired (timeout or cancel). In this later case, Ping MUST return the context error.
@@ -223,29 +177,12 @@ func (adapter *NhooyrWebsocketConnectionAdapter) Ping(ctx context.Context) error
 		adapter.mu.Lock()
 		conn := adapter.conn
 		adapter.mu.Unlock()
-		// Start span
-		ctx, span := adapter.tracer.Start(ctx, pingSpan, trace.WithSpanKind(trace.SpanKindClient))
-		defer span.End()
 		// Check whether there is already a connection set
-		if conn != nil {
-			err := conn.Ping(ctx)
-			if err != nil {
-				// Trace error and return
-				span.RecordError(err)
-				span.SetStatus(codes.Ok, codes.Ok.String())
-				return err
-			} else {
-				// Ok
-				span.SetStatus(codes.Ok, codes.Ok.String())
-				return nil
-			}
-		} else {
-			// No connection is set -> trace & return error
-			err := fmt.Errorf("ping failed because no connection is already up")
-			span.RecordError(err)
-			span.SetStatus(codes.Error, codes.Error.String())
-			return err
+		if conn == nil {
+			return fmt.Errorf("ping failed because no connection is already up")
 		}
+		// Call Ping and return results
+		return conn.Ping(ctx)
 	}
 }
 
@@ -275,8 +212,8 @@ func (adapter *NhooyrWebsocketConnectionAdapter) Ping(ctx context.Context) error
 //
 // # Returns
 //
-//   - MessageType: received message type. -1 in case of error.
-//   - []bytes: Message content. Nil in case of error.
+//   - MessageType: received message type (Binary | Text)
+//   - []bytes: Message content
 //   - error: in case of connection closure, context timeout/cancellation or failure.
 func (adapter *NhooyrWebsocketConnectionAdapter) Read(ctx context.Context) (wsconnadapter.MessageType, []byte, error) {
 	select {
@@ -289,68 +226,38 @@ func (adapter *NhooyrWebsocketConnectionAdapter) Read(ctx context.Context) (wsco
 		adapter.mu.Lock()
 		conn := adapter.conn
 		adapter.mu.Unlock()
-		// Start span
-		ctx, span := adapter.tracer.Start(ctx, readSpan, trace.WithSpanKind(trace.SpanKindClient))
-		defer span.End()
 		// Check whether there is already a connection set
-		if conn != nil {
-			nhooyrMsgType, msg, err := conn.Read(ctx)
-			if err != nil {
-				// Trace error
-				span.RecordError(err)
-				span.SetStatus(codes.Error, codes.Error.String())
-				// First, check context to know if error was caused by timeout/cancel
-				select {
-				case <-ctx.Done():
-					// Return context error
-					return -1, nil, ctx.Err()
-				default:
-					// Check if error is due to connection being closed
-					if websocket.CloseStatus(err) != -1 || errors.Is(err, io.EOF) {
-						// Error is because connection has been closed
-						if websocket.CloseStatus(err) != -1 {
-							// We have a close status code - return typed error
-							return -1, nil, wsconnadapter.WebsocketCloseError{
-								Code:   convertFromNhooyrStatusCodes(websocket.CloseStatus(err)),
-								Reason: err.Error(),
-								Err:    err,
-							}
-						} else {
-							// We do not have close status -> use default 1006 for typed error
-							return -1, nil, wsconnadapter.WebsocketCloseError{
-								Code:   wsconnadapter.AbnormalClosure,
-								Reason: "websocket connection abnormal closure",
-								Err:    err,
-							}
-						}
-					} else {
-						// Error is not because connection was closed
-						return -1, nil, err
+		if conn == nil {
+			return -1, nil, fmt.Errorf("read failed because no connection is already up")
+		}
+		// Call Read
+		nhooyrMsgType, msg, err := conn.Read(ctx)
+		if err != nil {
+			// Check if error is due to connection being closed
+			if websocket.CloseStatus(err) != -1 || errors.Is(err, io.EOF) {
+				// Error is because connection has been closed
+				if websocket.CloseStatus(err) != -1 {
+					// We have a close status code - return typed error
+					return -1, nil, wsconnadapter.WebsocketCloseError{
+						Code:   convertFromNhooyrStatusCodes(websocket.CloseStatus(err)),
+						Reason: err.Error(),
+						Err:    err,
+					}
+				} else {
+					// We do not have close status -> use default 1006 for typed error
+					return -1, nil, wsconnadapter.WebsocketCloseError{
+						Code:   wsconnadapter.AbnormalClosure,
+						Reason: "websocket connection abnormal closure",
+						Err:    err,
 					}
 				}
 			} else {
-				// Convert to wsclient msgtype
-				msgType := convertFromNhooyrMsgTypes(nhooyrMsgType)
-				msgTypeAttrVal := "binary"
-				if msgType == wsconnadapter.Text {
-					msgTypeAttrVal = "text"
-				}
-				// Trace
-				span.AddEvent(rcvdEvent, trace.WithAttributes(
-					attribute.Int(writeSpanBytesAttr, len(msg)),
-					attribute.String(writeSpanTypeAttr, msgTypeAttrVal),
-				))
-				span.SetStatus(codes.Ok, codes.Ok.String())
-				// Return result
-				return msgType, msg, nil
+				// Error is not because connection was closed
+				return -1, nil, err
 			}
-		} else {
-			// No connection is set -> trace & return error
-			err := fmt.Errorf("read failed because no connection is already up")
-			span.RecordError(err)
-			span.SetStatus(codes.Error, codes.Error.String())
-			return -1, nil, err
 		}
+		// Return result with converted msgtype
+		return convertFromNhooyrMsgTypes(nhooyrMsgType), msg, nil
 	}
 }
 
@@ -388,36 +295,12 @@ func (adapter *NhooyrWebsocketConnectionAdapter) Write(ctx context.Context, msgT
 		adapter.mu.Lock()
 		conn := adapter.conn
 		adapter.mu.Unlock()
-		// Start span
-		msgTypeAttrVal := "binary"
-		if msgType == wsconnadapter.Text {
-			msgTypeAttrVal = "text"
-		}
-		ctx, span := adapter.tracer.Start(ctx, writeSpan, trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(
-			attribute.Int(writeSpanBytesAttr, len(msg)),
-			attribute.String(writeSpanTypeAttr, msgTypeAttrVal),
-		))
-		defer span.End()
 		// Check whether there is already a connection set
-		if conn != nil {
-			err := conn.Write(ctx, convertToNhooyrMsgTypes(msgType), msg)
-			if err != nil {
-				// Trace error and return
-				span.RecordError(err)
-				span.SetStatus(codes.Ok, codes.Ok.String())
-				return err
-			} else {
-				// Ok
-				span.SetStatus(codes.Ok, codes.Ok.String())
-				return nil
-			}
-		} else {
-			// No connection is set -> trace & return error
-			err := fmt.Errorf("write failed because no connection is already up")
-			span.RecordError(err)
-			span.SetStatus(codes.Error, codes.Error.String())
-			return err
+		if conn == nil {
+			return fmt.Errorf("write failed because no connection is already up")
 		}
+		// Call Write and retuurn results
+		return conn.Write(ctx, convertToNhooyrMsgTypes(msgType), msg)
 	}
 }
 
