@@ -2,13 +2,14 @@ package wsadapternhooyr
 
 import (
 	"context"
-	"encoding/json"
+	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"testing"
 	"time"
 
-	"github.com/gbdevw/gowsclient/demowsserver"
+	"github.com/gbdevw/gowsclient/echowsserver"
 	wsconnadapter "github.com/gbdevw/gowsclient/wscengine/wsadapters"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -24,7 +25,7 @@ type NhooyrWebsocketConnectionAdapterTestSuite struct {
 	// Websocket server address
 	srvUrl *url.URL
 	// Websocket test server
-	srv *demowsserver.DemoWebsocketServer
+	srv *echowsserver.EchoWebsocketServer
 }
 
 // Run NhooyrWebsocketConnectionAdapterTestSuite test suite
@@ -34,13 +35,12 @@ func TestNhooyrWebsocketConnectionAdapterTestSuite(t *testing.T) {
 
 // NhooyrWebsocketConnectionAdapterTestSuite - Before all tests
 func (suite *NhooyrWebsocketConnectionAdapterTestSuite) SetupSuite() {
-	// Create server
+	// Create server with Nop standard logger
 	host := "localhost:8081"
-	srv, err := demowsserver.NewDemoWebsocketServer(context.Background(), &http.Server{Addr: host}, nil, nil)
-	require.NoError(suite.T(), err)
+	srv := echowsserver.NewEchoWebsocketServer(&http.Server{Addr: host}, log.New(io.Discard, "", log.Flags()))
 	require.NotNil(suite.T(), srv)
 	// Start server
-	err = srv.Start()
+	err := srv.Start()
 	require.NoError(suite.T(), err)
 	// Assign server to suite
 	suite.srv = srv
@@ -63,7 +63,7 @@ func (suite *NhooyrWebsocketConnectionAdapterTestSuite) TearDownSuite() {
 //
 // Check adapter fully implements interface.
 func (suite *NhooyrWebsocketConnectionAdapterTestSuite) TestInterfaceCompliance() {
-	var impl interface{} = NewNhooyrWebsocketConnectionAdapter(nil, nil)
+	var impl interface{} = NewNhooyrWebsocketConnectionAdapter(nil)
 	_, ok := impl.(wsconnadapter.WebsocketConnectionAdapterInterface)
 	require.True(suite.T(), ok)
 }
@@ -82,7 +82,7 @@ func (suite *NhooyrWebsocketConnectionAdapterTestSuite) TestInterfaceCompliance(
 //   - GetUnderlyingWebsocketConnection returns a non-nil websocket.Conn
 //   - Received underlying connection can be used to send a ping
 //   - Adapter can be used to send a ping
-//   - Second Dial call succeed and cause first connection to be closed
+//   - Second Dial call returns an error
 //   - GetUnderlyingWebsocketConnection returns a non-nil websocket.Conn
 //   - Received underlying connection can be used to send a ping
 //   - Call to Close succeed and cause second connection to be closed
@@ -91,12 +91,12 @@ func (suite *NhooyrWebsocketConnectionAdapterTestSuite) TestInterfaceCompliance(
 func (suite *NhooyrWebsocketConnectionAdapterTestSuite) TestControlMethods() {
 
 	// Create adapter
-	adapter := NewNhooyrWebsocketConnectionAdapter(nil, nil)
+	adapter := NewNhooyrWebsocketConnectionAdapter(nil)
 	// Get underlying websocket connection and check is nil
 	uconnif := adapter.GetUnderlyingWebsocketConnection()
 	require.Nil(suite.T(), uconnif)
 	// Connect to the server
-	_, err := adapter.Dial(context.Background(), suite.srvUrl)
+	_, err := adapter.Dial(context.Background(), *suite.srvUrl)
 	require.NoError(suite.T(), err)
 	// Get underlying websocket connection & type assert
 	uconnif = adapter.GetUnderlyingWebsocketConnection()
@@ -111,10 +111,7 @@ func (suite *NhooyrWebsocketConnectionAdapterTestSuite) TestControlMethods() {
 	err = adapter.Ping(context.Background())
 	require.NoError(suite.T(), err)
 	// Call Dial again
-	_, err = adapter.Dial(context.Background(), suite.srvUrl)
-	require.NoError(suite.T(), err)
-	// Check connection is closed
-	err = uconn.Ping(context.Background())
+	_, err = adapter.Dial(context.Background(), *suite.srvUrl)
 	require.Error(suite.T(), err)
 	// Get underlying websocket connection & type assert
 	uconnif = adapter.GetUnderlyingWebsocketConnection()
@@ -150,7 +147,7 @@ func (suite *NhooyrWebsocketConnectionAdapterTestSuite) TestControlMethods() {
 //   - Write return an error when called without active connection set.
 func (suite *NhooyrWebsocketConnectionAdapterTestSuite) TestMethodsErrorPathsWhenNoConnectionIsSet() {
 	// Create adapter
-	adapter := NewNhooyrWebsocketConnectionAdapter(nil, nil)
+	adapter := NewNhooyrWebsocketConnectionAdapter(nil)
 	// Call Close
 	err := adapter.Close(context.Background(), wsconnadapter.GoingAway, "")
 	require.Error(suite.T(), err)
@@ -181,7 +178,7 @@ func (suite *NhooyrWebsocketConnectionAdapterTestSuite) TestMethodsErrorPathsWhe
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	// Create adapter
-	adapter := NewNhooyrWebsocketConnectionAdapter(nil, nil)
+	adapter := NewNhooyrWebsocketConnectionAdapter(nil)
 	// Call Ping
 	err := adapter.Ping(ctx)
 	require.Error(suite.T(), err)
@@ -200,21 +197,21 @@ func (suite *NhooyrWebsocketConnectionAdapterTestSuite) TestMethodsErrorPathsWhe
 
 // # Description
 //
-// Test Dial method error path when trying to cnnect to a non-existing server.
+// Test Dial method error path when trying to connect to a non-existing server.
 func (suite *NhooyrWebsocketConnectionAdapterTestSuite) TestDialFailure() {
 	// Create adapter
-	adapter := NewNhooyrWebsocketConnectionAdapter(nil, nil)
+	adapter := NewNhooyrWebsocketConnectionAdapter(nil)
 	// Dial non-existing server
 	u, err := url.Parse("ws://localhost:42/none")
 	require.NoError(suite.T(), err)
-	res, err := adapter.Dial(context.Background(), u)
+	res, err := adapter.Dial(context.Background(), *u)
 	require.Error(suite.T(), err)
 	require.Nil(suite.T(), res)
 }
 
 // # Description
 //
-// Test methods error paths when server server has closed connection and adapter still thinks
+// Test methods error paths when connection is closed and adapter still thinks
 // connection is up.
 //
 // Test will succeed if:
@@ -224,22 +221,18 @@ func (suite *NhooyrWebsocketConnectionAdapterTestSuite) TestDialFailure() {
 //   - Adapter Write returns an error.
 func (suite *NhooyrWebsocketConnectionAdapterTestSuite) TestMethodsErrorWhenSrvHasClosedConnection() {
 	// Create adapter
-	adapter := NewNhooyrWebsocketConnectionAdapter(nil, nil)
+	adapter := NewNhooyrWebsocketConnectionAdapter(nil)
 	// Connect to the server
-	_, err := adapter.Dial(context.Background(), suite.srvUrl)
+	_, err := adapter.Dial(context.Background(), *suite.srvUrl)
 	require.NoError(suite.T(), err)
-	// Close the connection from server side
-	srvCloseMsg := demowsserver.CloseMessage{
-		Code:   websocket.StatusGoingAway,
-		Reason: "server shutdown",
-	}
-	suite.srv.CloseClientConnections(srvCloseMsg)
-	// Read from connection
+	// Get underlying websocket connection and close it
+	uconn := adapter.GetUnderlyingWebsocketConnection().(*websocket.Conn)
+	err = uconn.Close(websocket.StatusGoingAway, "")
+	require.NoError(suite.T(), err)
+	// Read from closed connection
 	_, _, err = adapter.Read(context.Background())
 	errRcvr := new(wsconnadapter.WebsocketCloseError)
 	require.ErrorAs(suite.T(), err, errRcvr)
-	require.True(suite.T(), errRcvr.Code == wsconnadapter.GoingAway || errRcvr.Code == wsconnadapter.AbnormalClosure)
-	require.NotEmpty(suite.T(), errRcvr.Reason)
 	// Ping
 	err = adapter.Ping(context.Background())
 	require.Error(suite.T(), err)
@@ -261,41 +254,20 @@ func (suite *NhooyrWebsocketConnectionAdapterTestSuite) TestReadAndWrite() {
 	// Create adapter
 	adapter := NewNhooyrWebsocketConnectionAdapter(nil)
 	// Connect to the server
-	_, err := adapter.Dial(context.Background(), suite.srvUrl)
-	require.NoError(suite.T(), err)
-	// Format & marshal request
-	echoReq := demowsserver.EchoRequest{
-		Request: demowsserver.Request{
-			Message: demowsserver.Message{
-				MsgType: demowsserver.MSG_TYPE_ECHO_REQUEST,
-			},
-			ReqId: "42",
-		},
-		Echo: "Hello",
-		Err:  false,
-	}
-	raw, err := json.Marshal(echoReq)
+	_, err := adapter.Dial(context.Background(), *suite.srvUrl)
 	require.NoError(suite.T(), err)
 	// Write request to server
-	err = adapter.Write(context.Background(), wsconnadapter.Text, raw)
+	expected := []byte("hello world")
+	err = adapter.Write(context.Background(), wsconnadapter.Text, expected)
 	require.NoError(suite.T(), err)
 	// Read response
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	msgType, raw, err := adapter.Read(ctx)
 	cancel()
-	require.NoError(suite.T(), err)
-	// Unmarshal response
-	echoResp := new(demowsserver.EchoResponse)
-	err = json.Unmarshal(raw, echoResp)
-	require.NoError(suite.T(), err)
 	// Check response
+	require.NoError(suite.T(), err)
 	require.Equal(suite.T(), wsconnadapter.Text, msgType)
-	require.Equal(suite.T(), echoReq.ReqId, echoResp.ReqId)
-	require.Equal(suite.T(), demowsserver.MSG_TYPE_ECHO_RESPONSE, echoResp.MsgType)
-	require.Equal(suite.T(), demowsserver.RESPONSE_STATUS_OK, echoResp.Status)
-	require.NotNil(suite.T(), echoResp.Data.Echo)
-	require.Nil(suite.T(), echoResp.Err)
-	require.Equal(suite.T(), echoReq.Echo, echoResp.Data.Echo)
+	require.Equal(suite.T(), expected, raw)
 	// Close connection
 	err = adapter.Close(context.Background(), wsconnadapter.GoingAway, "")
 	require.NoError(suite.T(), err)
