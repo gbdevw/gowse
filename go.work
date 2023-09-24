@@ -1,7 +1,7 @@
 go 1.21.1
 
 use (
-	./demowsserver
+	./echowsserver
 	./example
 	./wscengine
 )
