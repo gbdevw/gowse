@@ -48,7 +48,7 @@ func NewWebsocketConnectionAdapterInterfaceMock() *WebsocketConnectionAdapterInt
 //
 //   - Server response to websocket handshake
 //   - error if any
-func (mock *WebsocketConnectionAdapterInterfaceMock) Dial(ctx context.Context, target *url.URL) (*http.Response, error) {
+func (mock *WebsocketConnectionAdapterInterfaceMock) Dial(ctx context.Context, target url.URL) (*http.Response, error) {
 	args := mock.Called(ctx, target)
 	return args.Get(0).(*http.Response), args.Error(1)
 }
