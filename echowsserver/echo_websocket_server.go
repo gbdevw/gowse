@@ -37,6 +37,8 @@ type EchoWebsocketServer struct {
 	cancelServerCtx context.CancelFunc
 	// Internal mutex used to coordinate start/stop
 	startMu *sync.Mutex
+	// Logger
+	logger *log.Logger
 }
 
 // # Description
@@ -49,13 +51,19 @@ type EchoWebsocketServer struct {
 //     overriden with this server handler. If nil is provided, a default HTTP server listening
 //     on localhost:8080 will be used.
 //
+//   - logger: Logger to use. If nil, default logger will be used
+//
 // # Returns
 //
 // A new, non-started EchoWebsocketServer or an error if any has occured.
-func NewEchoWebsocketServer(httpServer *http.Server) *EchoWebsocketServer {
+func NewEchoWebsocketServer(httpServer *http.Server, logger *log.Logger) *EchoWebsocketServer {
 	if httpServer == nil {
 		// Check provided http.Server is not nil
 		httpServer = &http.Server{Addr: "localhost:8080", BaseContext: func(l net.Listener) context.Context { return context.Background() }}
+	}
+	if logger == nil {
+		// Use default logger
+		logger = log.Default()
 	}
 	// Build server with initial state
 	wssrv := &EchoWebsocketServer{
@@ -63,6 +71,7 @@ func NewEchoWebsocketServer(httpServer *http.Server) *EchoWebsocketServer {
 		upgrader:   websocket.Upgrader{},
 		started:    false,
 		startMu:    &sync.Mutex{},
+		logger:     logger,
 	}
 	// Register server as handler of the underlying http server
 	httpServer.Handler = wssrv
@@ -116,20 +125,20 @@ func (srv *EchoWebsocketServer) Stop() error {
 // Server handler which accepts incoming websocket connections.
 func (srv *EchoWebsocketServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Accept incoming client connection
-	log.Println("new client connection")
+	srv.logger.Println("new client connection")
 	c, err := srv.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		// Log, record error in span, cancel client session context and exit
-		log.Println("an error occured while accepting client connection", err)
+		srv.logger.Println("an error occured while accepting client connection", err)
 		return
 	}
 	// Start goroutines which will handle new client
-	go closeWatchdog(srv.serverCtx, c)
-	go runClientSession(context.WithValue(srv.serverCtx, sessionId, uuid.New()), c)
+	go srv.closeWatchdog(srv.serverCtx, c)
+	go srv.runClientSession(context.WithValue(srv.serverCtx, sessionId, uuid.New()), c)
 }
 
 // Manages the client session and handle echo feature until the conneciton is closed.
-func runClientSession(ctx context.Context, conn *websocket.Conn) {
+func (srv *EchoWebsocketServer) runClientSession(ctx context.Context, conn *websocket.Conn) {
 	for {
 		// Read message
 		mt, message, err := conn.ReadMessage()
@@ -137,24 +146,24 @@ func runClientSession(ctx context.Context, conn *websocket.Conn) {
 			// Check if close error
 			if ce, ok := err.(*websocket.CloseError); ok {
 				// Connection is closed
-				log.Printf("%s - connection closed: %s"+"\n", ctx.Value(sessionId), ce.Error())
+				srv.logger.Printf("%s - connection closed: %s"+"\n", ctx.Value(sessionId), ce.Error())
 				return
 			}
 			if errors.Is(err, io.EOF) ||
 				strings.Contains(strings.ToLower(err.Error()), "use of closed network connection") {
 				// Connection is closed
-				log.Printf("%s - connection closed: %s"+"\n", ctx.Value(sessionId), err.Error())
+				srv.logger.Printf("%s - connection closed: %s"+"\n", ctx.Value(sessionId), err.Error())
 				return
 			}
 			// Other errors
-			log.Printf("%s - read error: %s"+"\n", ctx.Value(sessionId), err.Error())
+			srv.logger.Printf("%s - read error: %s"+"\n", ctx.Value(sessionId), err.Error())
 			return
 		}
-		log.Printf("%s - read: %s"+"\n", ctx.Value(sessionId), string(message))
+		srv.logger.Printf("%s - read: %s"+"\n", ctx.Value(sessionId), string(message))
 		// Echo
 		err = conn.WriteMessage(mt, message)
 		if err != nil {
-			log.Printf("%s - write error: %s"+"\n", ctx.Value(sessionId), err.Error())
+			srv.logger.Printf("%s - write error: %s"+"\n", ctx.Value(sessionId), err.Error())
 			return
 		}
 	}
@@ -162,7 +171,7 @@ func runClientSession(ctx context.Context, conn *websocket.Conn) {
 
 // This function waits for a cancelation signal on provided context Done channel
 // and close the provided websocket connection
-func closeWatchdog(ctx context.Context, conn *websocket.Conn) {
+func (srv *EchoWebsocketServer) closeWatchdog(ctx context.Context, conn *websocket.Conn) {
 	// Wait for context to be canceled
 	<-ctx.Done()
 	// Close connection

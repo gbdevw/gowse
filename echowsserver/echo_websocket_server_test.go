@@ -39,7 +39,7 @@ func TestEchoWebsocketServerMethodsTestSuite(t *testing.T) {
 //   - New websocket client ping fails because connection is closed.
 func (suite *EchoWebsocketServerMethodsTestSuite) TestServerStartAndStop() {
 	// Create server
-	srv := NewEchoWebsocketServer(nil)
+	srv := NewEchoWebsocketServer(nil, nil)
 	require.NotNil(suite.T(), srv)
 	// Start server
 	err := srv.Start()
@@ -68,7 +68,7 @@ func (suite *EchoWebsocketServerMethodsTestSuite) TestServerStartAndStop() {
 // Start method call.
 func (suite *EchoWebsocketServerMethodsTestSuite) TestServerStartErrorAlreadyStarted() {
 	// Create server
-	srv := NewEchoWebsocketServer(nil)
+	srv := NewEchoWebsocketServer(nil, nil)
 	require.NotNil(suite.T(), srv)
 	// Start server
 	err := srv.Start()
@@ -87,7 +87,7 @@ func (suite *EchoWebsocketServerMethodsTestSuite) TestServerStartErrorAlreadySta
 // while server has not started.
 func (suite *EchoWebsocketServerMethodsTestSuite) TestServerStopErrorSrvNotStarted() {
 	// Create server
-	srv := NewEchoWebsocketServer(nil)
+	srv := NewEchoWebsocketServer(nil, nil)
 	require.NotNil(suite.T(), srv)
 	// Stop server
 	err := srv.Stop()
@@ -100,7 +100,7 @@ func (suite *EchoWebsocketServerMethodsTestSuite) TestServerStopErrorSrvNotStart
 // to the server, and send and receive multiple echo messages.
 func (suite *EchoWebsocketServerMethodsTestSuite) TestEchoFeature() {
 	// Create server
-	srv := NewEchoWebsocketServer(nil)
+	srv := NewEchoWebsocketServer(nil, nil)
 	require.NotNil(suite.T(), srv)
 	// Start server
 	err := srv.Start()
