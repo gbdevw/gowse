@@ -30,8 +30,8 @@ type GorillaWebsocketConnectionAdapter struct {
 	mu sync.Mutex
 	// Internal channel of channels used to manage ping/pong
 	//
-	// The channel that is sent is used to wait for pong.
-	pingRequests chan chan any
+	// The channel that is sent is used to wait for pong or an error.
+	pingRequests chan chan error
 }
 
 // # Description
@@ -61,7 +61,7 @@ func NewGorillaWebsocketConnectionAdapter(dialer *websocket.Dialer, requestHeade
 		requestHeader: requestHeader,
 		mu:            sync.Mutex{},
 		// Use a chan with capacity so ping requests can be recorded before sending ping message.
-		pingRequests: make(chan chan any, 10),
+		pingRequests: make(chan chan error, 10),
 	}
 }
 
@@ -147,6 +147,12 @@ func (adapter *GorillaWebsocketConnectionAdapter) Close(ctx context.Context, cod
 	}
 	// Close connection
 	err := adapter.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(int(code), reason), time.Now().Add(60*time.Second))
+	// Propagate a close error so all pending Ping calls will return the error
+	propagateToAllActiveListener(adapter.pingRequests, wsconnadapter.WebsocketCloseError{
+		Code:   code,
+		Reason: reason,
+		Err:    fmt.Errorf("client closed the connection"),
+	})
 	// Void connection in any case
 	adapter.conn = nil
 	// Return result
@@ -197,7 +203,7 @@ func (adapter *GorillaWebsocketConnectionAdapter) Ping(ctx context.Context) erro
 		// Create channel to receive pong and send it on pingRequest channel
 		// It is OK because pingRequest is a channel with capacity
 		// pong channel must be a blocking channel
-		pong := make(chan any)
+		pong := make(chan error)
 		adapter.pingRequests <- pong
 		// Send Ping
 		err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(60*time.Second))
@@ -208,8 +214,9 @@ func (adapter *GorillaWebsocketConnectionAdapter) Ping(ctx context.Context) erro
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-pong:
-			return nil
+		case err := <-pong:
+			// Return received notification (nil or error if ping/pong failed)
+			return err
 		}
 	}
 }
@@ -266,20 +273,27 @@ func (adapter *GorillaWebsocketConnectionAdapter) Read(ctx context.Context) (wsc
 				// Check if close error
 				if ce, ok := err.(*websocket.CloseError); ok {
 					// Connection is closed
-					return -1, nil, wsconnadapter.WebsocketCloseError{
+					closeErr := wsconnadapter.WebsocketCloseError{
 						Code:   wsconnadapter.StatusCode(ce.Code),
 						Reason: err.Error(),
 						Err:    err,
 					}
+					// Propagate to all Pong listeners (so all pending Ping calls return the error)
+					propagateToAllActiveListener(adapter.pingRequests, closeErr)
+					// Return error
+					return -1, nil, closeErr
 				}
 				if errors.Is(err, io.EOF) ||
 					strings.Contains(strings.ToLower(err.Error()), "use of closed network connection") {
 					// Connection is closed
-					return -1, nil, wsconnadapter.WebsocketCloseError{
+					closeErr := wsconnadapter.WebsocketCloseError{
 						Code:   wsconnadapter.AbnormalClosure,
 						Reason: err.Error(),
 						Err:    err,
 					}
+					// Propagate to all Pong listeners (so all pending Ping calls return the error)
+					propagateToAllActiveListener(adapter.pingRequests, closeErr)
+					return -1, nil, closeErr
 				}
 				// Other errors
 				return -1, nil, err
@@ -290,33 +304,19 @@ func (adapter *GorillaWebsocketConnectionAdapter) Read(ctx context.Context) (wsc
 				// Close message from server - Force close connection
 				adapter.conn.Close()
 				// Return close error with received data
-				return -1, nil, wsconnadapter.WebsocketCloseError{
+				closeErr := wsconnadapter.WebsocketCloseError{
 					Code:   wsconnadapter.StatusCode(binary.BigEndian.Uint16(msg[0:2])),
 					Reason: string(msg[2:]),
-					Err:    err,
+					Err:    fmt.Errorf("close message received from server"),
 				}
+				// Propagate to all Pong listeners (so all pending Ping calls return the error)
+				propagateToAllActiveListener(adapter.pingRequests, closeErr)
+				// Return close error
+				return -1, nil, closeErr
 			case websocket.PongMessage:
-				// Pong - browse ping requests until a channel with an active listener
-				// is found to send the pong signal. Discard if no active pong listener.
-				for {
-					select {
-					// Extract a pending ping request if any
-					case pong := <-adapter.pingRequests:
-						select {
-						// Try to write pong signal on blocking channel
-						case pong <- nil:
-							// Ok - break
-						default:
-							// No active listener on this ping request
-							// Proceed to next pending ping request
-							continue
-						}
-					default:
-						// No pending ping request - break
-					}
-					// Break loop
-					break
-				}
+				// Pong received: propagate pong notification to first active listener
+				// so a pending Ping call can return with nil
+				propagateToFirstActiveListener(adapter.pingRequests, nil)
 			case websocket.PingMessage:
 				// Discard
 				continue
@@ -384,4 +384,50 @@ func (adapter *GorillaWebsocketConnectionAdapter) GetUnderlyingWebsocketConnecti
 	defer adapter.mu.Unlock()
 	// Return underlying connection
 	return adapter.conn
+}
+
+// Propagate a notification to the first writeable (non-blocking write) channel received.
+//
+// The function returns false if the notification could not be propagated: either because no channel
+// was received or because all received channels were not writeable.
+func propagateToFirstActiveListener(listeners chan chan error, notification error) bool {
+	for {
+		select {
+		case listener := <-listeners:
+			// We have received a channel from a listener
+			select {
+			case listener <- notification:
+				// Listener was active (or channel has capacity) - Notification has been sent
+				return true
+			default:
+				// Listener was not actively listenning (not writeable) - Loop to try the next one
+				continue
+			}
+		default:
+			// No channel available to notify active listeners - Exit (false)
+			return false
+		}
+	}
+}
+
+// Propagate a notification to all writeable (non-blocking write) channel received through
+// the provided channel.
+func propagateToAllActiveListener(listeners chan chan error, notification error) {
+	for {
+		select {
+		case listener := <-listeners:
+			// We have received a channel from a listener
+			select {
+			case listener <- notification:
+				// Listener was active (or channel has capacity) - Notification has been sent
+				return
+			default:
+				// Listener is not actively listening - Skip
+				continue
+			}
+		default:
+			// No active listeners left - Exit
+			return
+		}
+	}
 }
