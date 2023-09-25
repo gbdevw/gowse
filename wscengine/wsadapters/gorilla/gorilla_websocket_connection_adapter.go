@@ -1,16 +1,12 @@
 // Package which contains a WebsocketConnectionAdapterInterface implementation for
 // gorilla/websocket library (https://github.com/gorilla/websocket).
-package wsadapternhooyr
+package wsadaptergorilla
 
 import (
 	"context"
-	"encoding/binary"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"sync"
 	"time"
 
@@ -97,15 +93,18 @@ func (adapter *GorillaWebsocketConnectionAdapter) Dial(ctx context.Context, targ
 			// Return response and error
 			return res, err
 		}
-		// Persist connection internally and return
+		// Persist connection internally and set handlers
 		adapter.conn = conn
+		conn.SetCloseHandler(adapter.closeHandler)
+		conn.SetPongHandler(adapter.pongHandler)
+		// Return
 		return res, nil
 	}
 }
 
 // # Description
 //
-// Send a close message with the provided status code and an optional close reason and close
+// Send a close message with the provided status code and an optional close reason and drop
 // the websocket connection.
 //
 // # Inputs
@@ -128,7 +127,8 @@ func (adapter *GorillaWebsocketConnectionAdapter) Close(ctx context.Context, cod
 	}
 	// Close connection
 	err := adapter.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(int(code), reason), time.Now().Add(60*time.Second))
-	// Propagate a close error so all pending Ping calls will return the error
+	// Propagate close error to all pending Ping - This has to be done be close handler works only
+	// when conneciton is closed by server (not from client side)
 	propagateToAllActiveListener(adapter.pingRequests, wsconnadapter.WebsocketCloseError{
 		Code:   code,
 		Reason: reason,
@@ -142,10 +142,11 @@ func (adapter *GorillaWebsocketConnectionAdapter) Close(ctx context.Context, cod
 
 // # Description
 //
-// Send a Ping message to the websocket server and block until a Pong response is received.
+// Send a ping message to the websocket server and block until a pong response is received, the
+// connection is closed, or the provided context is cancelled.
 //
-// A separate goroutine must continuously call Read method in order to process messages from the
-// server so pong replies from the server can be processed.
+// A separate goroutine must continuously call the Read method to process messages from the server
+// so that pong responses from the server can be processed.
 //
 // # Inputs
 //
@@ -174,7 +175,13 @@ func (adapter *GorillaWebsocketConnectionAdapter) Ping(ctx context.Context) erro
 		// It is OK because pingRequest is a channel with capacity
 		// pong channel must be a blocking channel
 		pong := make(chan error)
-		adapter.pingRequests <- pong
+		select {
+		case adapter.pingRequests <- pong:
+			// Do nothing
+		case <-ctx.Done():
+			// Handle cancellation in case pingRequest channel is full
+			return ctx.Err()
+		}
 		// Send Ping
 		err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(60*time.Second))
 		if err != nil {
@@ -194,16 +201,16 @@ func (adapter *GorillaWebsocketConnectionAdapter) Ping(ctx context.Context) erro
 // # Description
 //
 // Read a single message from the websocket server. Read blocks until a message is received
-// from the server, until connection closes or until a timeout or a cancel occurs.
+// from the server, or until connection is closed.
 //
 // Read will handle control frames from the server until a message is received:
-//   - Ping messages from server are discarded
-//   - Close messages will result in a wsconnadapter.WebsocketCloseError
+//   - Ping from server are discarded.
+//   - Close will result in a wsconnadapter.WebsocketCloseError for Read and all pending Ping.
 //   - Each pong message will be used to unlock one pending Ping call.
 //
 // # Inputs
 //
-//   - ctx: Context used for tracing/timeout purpose
+//   - ctx: Context used for tracing purpose
 //
 // # Returns
 //
@@ -225,67 +232,27 @@ func (adapter *GorillaWebsocketConnectionAdapter) Read(ctx context.Context) (wsc
 		if conn == nil {
 			return -1, nil, fmt.Errorf("read failed because no connection is already up")
 		}
-		// Call Read until a message is read - handle control frames
-		for {
-			// Read message
-			msgType, msg, err := conn.ReadMessage()
-			if err != nil {
-				// Check if close error
-				if ce, ok := err.(*websocket.CloseError); ok {
-					// Connection is closed
-					closeErr := wsconnadapter.WebsocketCloseError{
-						Code:   wsconnadapter.StatusCode(ce.Code),
-						Reason: err.Error(),
-						Err:    err,
-					}
-					// Propagate to all Pong listeners (so all pending Ping calls return the error)
-					propagateToAllActiveListener(adapter.pingRequests, closeErr)
-					// Return error
-					return -1, nil, closeErr
-				}
-				if errors.Is(err, io.EOF) ||
-					strings.Contains(strings.ToLower(err.Error()), "use of closed network connection") {
-					// Connection is closed
-					closeErr := wsconnadapter.WebsocketCloseError{
-						Code:   wsconnadapter.AbnormalClosure,
-						Reason: err.Error(),
-						Err:    err,
-					}
-					// Propagate to all Pong listeners (so all pending Ping calls return the error)
-					propagateToAllActiveListener(adapter.pingRequests, closeErr)
-					return -1, nil, closeErr
-				}
-				// Other errors
-				return -1, nil, err
-			}
-			// Check message type
-			switch msgType {
-			case websocket.CloseMessage:
-				// Close message from server - Force close connection
-				adapter.conn.Close()
-				// Return close error with received data
+		// Read message
+		msgType, msg, err := conn.ReadMessage()
+		if err != nil {
+			// Check if close error
+			if ce, ok := err.(*websocket.CloseError); ok {
+				// Connection is closed
 				closeErr := wsconnadapter.WebsocketCloseError{
-					Code:   wsconnadapter.StatusCode(binary.BigEndian.Uint16(msg[0:2])),
-					Reason: string(msg[2:]),
-					Err:    fmt.Errorf("close message received from server"),
+					Code:   wsconnadapter.StatusCode(ce.Code),
+					Reason: err.Error(),
+					Err:    err,
 				}
-				// Propagate to all Pong listeners (so all pending Ping calls return the error)
-				propagateToAllActiveListener(adapter.pingRequests, closeErr)
-				// Return close error
+				// Return error
 				return -1, nil, closeErr
-			case websocket.PongMessage:
-				// Pong received: propagate pong notification to first active listener
-				// so a pending Ping call can return with nil
-				propagateToFirstActiveListener(adapter.pingRequests, nil)
-			case websocket.PingMessage:
-				// Discard
-				continue
-			default:
-				// Return message
-				return wsconnadapter.MessageType(msgType), msg, nil
 			}
+			// Other errors
+			return -1, nil, err
 		}
+		// Return message
+		return wsconnadapter.MessageType(msgType), msg, nil
 	}
+
 }
 
 // # Description
@@ -308,17 +275,15 @@ func (adapter *GorillaWebsocketConnectionAdapter) Write(ctx context.Context, msg
 		// Shortcut if context is done (timeout/cancel)
 		return ctx.Err()
 	default:
-		// Lock internal mutex before and store current conn reference in local variable to allow
-		// other routines to perform other operations on the connection.
+		// Lock internal mutex as WriteMessage cannot be called concurrently
 		adapter.mu.Lock()
-		conn := adapter.conn
-		adapter.mu.Unlock()
+		defer adapter.mu.Unlock()
 		// Check whether there is already a connection set
-		if conn == nil {
+		if adapter.conn == nil {
 			return fmt.Errorf("write failed because no connection is already up")
 		}
-		// Call Write and retuurn results
-		return conn.WriteMessage(int(msgType), msg)
+		// Call Write and return results
+		return adapter.conn.WriteMessage(int(msgType), msg)
 	}
 }
 
@@ -336,6 +301,34 @@ func (adapter *GorillaWebsocketConnectionAdapter) GetUnderlyingWebsocketConnecti
 	// Return underlying connection
 	return adapter.conn
 }
+
+/*************************************************************************************************/
+/* INTERNAL                                                                                      */
+/*************************************************************************************************/
+
+// Handler for received Pong which will propagate a pong notification to the first active listner
+// waiting for a Pong notification.
+func (adapter *GorillaWebsocketConnectionAdapter) pongHandler(appData string) error {
+	// Propagate pong to first active listener
+	propagateToFirstActiveListener(adapter.pingRequests, nil)
+	return nil
+}
+
+// Handler for received Close which will propagate a close error notification to all active
+// listeners waiting for a Pong notification.
+func (adapter *GorillaWebsocketConnectionAdapter) closeHandler(code int, text string) error {
+	// Build a close error and propagate it to alla ctive listeners wiaiting for a Pong.
+	propagateToAllActiveListener(adapter.pingRequests, wsconnadapter.WebsocketCloseError{
+		Code:   wsconnadapter.StatusCode(code),
+		Reason: text,
+		Err:    fmt.Errorf("close message received from server"),
+	})
+	return nil
+}
+
+/*************************************************************************************************/
+/* UTILS                                                                                         */
+/*************************************************************************************************/
 
 // Propagate a notification to the first writeable (non-blocking write) channel received.
 //
