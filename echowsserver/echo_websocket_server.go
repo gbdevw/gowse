@@ -141,6 +141,7 @@ func (srv *EchoWebsocketServer) ServeHTTP(w http.ResponseWriter, r *http.Request
 func (srv *EchoWebsocketServer) runClientSession(ctx context.Context, conn *websocket.Conn) {
 	for {
 		// Read message
+		srv.logger.Printf("%s - waiting for messages"+"\n", ctx.Value(sessionId))
 		mt, message, err := conn.ReadMessage()
 		if err != nil {
 			// Check if close error
@@ -159,7 +160,8 @@ func (srv *EchoWebsocketServer) runClientSession(ctx context.Context, conn *webs
 			srv.logger.Printf("%s - read error: %s"+"\n", ctx.Value(sessionId), err.Error())
 			return
 		}
-		srv.logger.Printf("%s - read: %s"+"\n", ctx.Value(sessionId), string(message))
+		// Log received message
+		srv.logger.Printf("%s - type: %d - read: %s"+"\n", ctx.Value(sessionId), mt, string(message))
 		// Echo
 		err = conn.WriteMessage(mt, message)
 		if err != nil {

@@ -105,7 +105,7 @@ func (suite *EchoWebsocketServerMethodsTestSuite) TestEchoFeature() {
 	// Start server
 	err := srv.Start()
 	require.NoError(suite.T(), err)
-	// Connect to websocket server, ping and close connection
+	// Connect to websocket server
 	conn, res, err := websocket.Dial(context.Background(), "ws://localhost:8080", nil)
 	require.NoError(suite.T(), err)
 	require.NotNil(suite.T(), res)
