@@ -41,7 +41,7 @@ type WebsocketConnectionAdapterInterface interface {
 	Dial(ctx context.Context, target url.URL) (*http.Response, error)
 	// # Description
 	//
-	// Send a close message with the provided status code and an optional close reason and close
+	// Send a close message with the provided status code and an optional close reason and drop
 	// the websocket connection.
 	//
 	// # Expected behaviour
@@ -63,7 +63,8 @@ type WebsocketConnectionAdapterInterface interface {
 	Close(ctx context.Context, code StatusCode, reason string) error
 	// # Description
 	//
-	// Send a Ping message to the websocket server and blocks until a Pong response is received.
+	// Send a Ping message to the websocket server and blocks until a Pong response is received, a
+	// timmeout occurs, or connection is closed.
 	//
 	// # Expected behaviour
 	//
@@ -91,7 +92,7 @@ type WebsocketConnectionAdapterInterface interface {
 	// # Description
 	//
 	// Read a single message from the websocket server. Read blocks until a message is received
-	// from the server, until connection closes or until a timeout or a cancel occurs.
+	// from the server or until connection closes.
 	//
 	// # Expected behaviour
 	//
@@ -106,17 +107,17 @@ type WebsocketConnectionAdapterInterface interface {
 	//	- Read MUST return a WebsocketCloseError either if a close message is read or if connection
 	//    is closed without a close message. In the later case, the 1006 status code MUST be used.
 	//
-	//	- Read MUST block until a message is read from the server or until an error occurs.
+	//	- Read MUST block until a message is read from the server or until connection is closed.
 	//
 	// # Inputs
 	//
-	//	- ctx: Context used for tracing/timeout purpose
+	//	- ctx: Context used for tracing purpose
 	//
 	// # Returns
 	//
 	//	- MessageType: received message type (Binary | Text)
 	//	- []bytes: Message content
-	//	- error: in case of connection closure, context timeout/cancellation or failure.
+	//	- error: in case of connection closure or failure.
 	Read(ctx context.Context) (MessageType, []byte, error)
 	// # Description
 	//
