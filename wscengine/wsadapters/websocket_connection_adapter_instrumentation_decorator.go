@@ -3,6 +3,7 @@ package wsadapters
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 
@@ -29,6 +30,10 @@ func NewWebsocketConnectionAdapterInstrumentationDecorator(
 	decorated WebsocketConnectionAdapterInterface,
 	tracerProvider trace.TracerProvider,
 ) (*WebsocketConnectionAdapterInstrumentationDecorator, error) {
+	// Return error if decorated is nil
+	if decorated == nil {
+		return nil, fmt.Errorf("provided decorated is nil")
+	}
 	// If tracerProvider is nil
 	if tracerProvider == nil {
 		tracerProvider = otel.GetTracerProvider()
