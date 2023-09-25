@@ -12,7 +12,7 @@ import (
 	"net/url"
 	"sync"
 
-	wsconnadapter "github.com/gbdevw/gowsclient/wscengine/wsadapters"
+	"github.com/gbdevw/gowsclient/wscengine/wsadapters"
 	"nhooyr.io/websocket"
 )
 
@@ -98,7 +98,7 @@ func (adapter *NhooyrWebsocketConnectionAdapter) Dial(ctx context.Context, targe
 //
 //   - nil in case of success
 //   - error: server unreachable, connection already closed, ...
-func (adapter *NhooyrWebsocketConnectionAdapter) Close(ctx context.Context, code wsconnadapter.StatusCode, reason string) error {
+func (adapter *NhooyrWebsocketConnectionAdapter) Close(ctx context.Context, code wsadapters.StatusCode, reason string) error {
 	// Lock internal mutex before accessing internal state
 	adapter.mu.Lock()
 	defer adapter.mu.Unlock()
@@ -171,7 +171,7 @@ func (adapter *NhooyrWebsocketConnectionAdapter) Ping(ctx context.Context) error
 //   - MessageType: received message type (Binary | Text)
 //   - []bytes: Message content
 //   - error: in case of connection closure, context timeout/cancellation or failure.
-func (adapter *NhooyrWebsocketConnectionAdapter) Read(ctx context.Context) (wsconnadapter.MessageType, []byte, error) {
+func (adapter *NhooyrWebsocketConnectionAdapter) Read(ctx context.Context) (wsadapters.MessageType, []byte, error) {
 	select {
 	case <-ctx.Done():
 		// Shortcut if context is done (timeout/cancel)
@@ -194,15 +194,15 @@ func (adapter *NhooyrWebsocketConnectionAdapter) Read(ctx context.Context) (wsco
 				// Error is because connection has been closed
 				if websocket.CloseStatus(err) != -1 {
 					// We have a close status code - return typed error
-					return -1, nil, wsconnadapter.WebsocketCloseError{
+					return -1, nil, wsadapters.WebsocketCloseError{
 						Code:   convertFromNhooyrStatusCodes(websocket.CloseStatus(err)),
 						Reason: err.Error(),
 						Err:    err,
 					}
 				} else {
 					// We do not have close status -> use default 1006 for typed error
-					return -1, nil, wsconnadapter.WebsocketCloseError{
-						Code:   wsconnadapter.AbnormalClosure,
+					return -1, nil, wsadapters.WebsocketCloseError{
+						Code:   wsadapters.AbnormalClosure,
 						Reason: "websocket connection abnormal closure",
 						Err:    err,
 					}
@@ -231,7 +231,7 @@ func (adapter *NhooyrWebsocketConnectionAdapter) Read(ctx context.Context) (wsco
 // # Returns
 //
 //   - error: in case of connection closure, context timeout/cancellation or failure.
-func (adapter *NhooyrWebsocketConnectionAdapter) Write(ctx context.Context, msgType wsconnadapter.MessageType, msg []byte) error {
+func (adapter *NhooyrWebsocketConnectionAdapter) Write(ctx context.Context, msgType wsadapters.MessageType, msg []byte) error {
 	select {
 	case <-ctx.Done():
 		// Shortcut if context is done (timeout/cancel)
@@ -281,39 +281,39 @@ func (adapter *NhooyrWebsocketConnectionAdapter) GetUnderlyingWebsocketConnectio
 // # Returns
 //
 // Converted code or websocket.StatusAbnormalClosure if none is corresponding.
-func convertToNhooyrStatusCodes(code wsconnadapter.StatusCode) websocket.StatusCode {
-	if code == wsconnadapter.NormalClosure {
+func convertToNhooyrStatusCodes(code wsadapters.StatusCode) websocket.StatusCode {
+	if code == wsadapters.NormalClosure {
 		return websocket.StatusNormalClosure
 	}
-	if code == wsconnadapter.GoingAway {
+	if code == wsadapters.GoingAway {
 		return websocket.StatusGoingAway
 	}
-	if code == wsconnadapter.ProtocolError {
+	if code == wsadapters.ProtocolError {
 		return websocket.StatusProtocolError
 	}
-	if code == wsconnadapter.UnsupportedData {
+	if code == wsadapters.UnsupportedData {
 		return websocket.StatusUnsupportedData
 	}
-	if code == wsconnadapter.NoStatusReceived {
+	if code == wsadapters.NoStatusReceived {
 		return websocket.StatusNoStatusRcvd
 	}
-	if code == wsconnadapter.InvalidFramePayloadData {
+	if code == wsadapters.InvalidFramePayloadData {
 		return websocket.StatusInvalidFramePayloadData
 	}
-	if code == wsconnadapter.PolicyViolation {
+	if code == wsadapters.PolicyViolation {
 		return websocket.StatusPolicyViolation
 	}
-	if code == wsconnadapter.MessageTooBig {
+	if code == wsadapters.MessageTooBig {
 		return websocket.StatusMessageTooBig
 
 	}
-	if code == wsconnadapter.MandatoryExtension {
+	if code == wsadapters.MandatoryExtension {
 		return websocket.StatusMandatoryExtension
 	}
-	if code == wsconnadapter.InternalError {
+	if code == wsadapters.InternalError {
 		return websocket.StatusInternalError
 	}
-	if code == wsconnadapter.TLSHandshake {
+	if code == wsadapters.TLSHandshake {
 		return websocket.StatusTLSHandshake
 	}
 	return websocket.StatusAbnormalClosure
@@ -329,43 +329,43 @@ func convertToNhooyrStatusCodes(code wsconnadapter.StatusCode) websocket.StatusC
 //
 // # Returns
 //
-// Converted code or wsconnadapter.AbnormalClosure if none is corresponding.
-func convertFromNhooyrStatusCodes(code websocket.StatusCode) wsconnadapter.StatusCode {
+// Converted code or wsadapters.AbnormalClosure if none is corresponding.
+func convertFromNhooyrStatusCodes(code websocket.StatusCode) wsadapters.StatusCode {
 	if code == websocket.StatusNormalClosure {
-		return wsconnadapter.NormalClosure
+		return wsadapters.NormalClosure
 	}
 	if code == websocket.StatusGoingAway {
-		return wsconnadapter.GoingAway
+		return wsadapters.GoingAway
 	}
 	if code == websocket.StatusProtocolError {
-		return wsconnadapter.ProtocolError
+		return wsadapters.ProtocolError
 	}
 	if code == websocket.StatusUnsupportedData {
-		return wsconnadapter.UnsupportedData
+		return wsadapters.UnsupportedData
 	}
 	if code == websocket.StatusNoStatusRcvd {
-		return wsconnadapter.NoStatusReceived
+		return wsadapters.NoStatusReceived
 	}
 	if code == websocket.StatusInvalidFramePayloadData {
-		return wsconnadapter.InvalidFramePayloadData
+		return wsadapters.InvalidFramePayloadData
 	}
 	if code == websocket.StatusPolicyViolation {
-		return wsconnadapter.PolicyViolation
+		return wsadapters.PolicyViolation
 	}
 	if code == websocket.StatusMessageTooBig {
-		return wsconnadapter.MessageTooBig
+		return wsadapters.MessageTooBig
 
 	}
 	if code == websocket.StatusMandatoryExtension {
-		return wsconnadapter.MandatoryExtension
+		return wsadapters.MandatoryExtension
 	}
 	if code == websocket.StatusInternalError {
-		return wsconnadapter.InternalError
+		return wsadapters.InternalError
 	}
 	if code == websocket.StatusTLSHandshake {
-		return wsconnadapter.TLSHandshake
+		return wsadapters.TLSHandshake
 	}
-	return wsconnadapter.AbnormalClosure
+	return wsadapters.AbnormalClosure
 }
 
 // # Description
@@ -379,8 +379,8 @@ func convertFromNhooyrStatusCodes(code websocket.StatusCode) wsconnadapter.Statu
 // # Returns
 //
 // Converted code. Default to binary message type if no match.
-func convertToNhooyrMsgTypes(msgType wsconnadapter.MessageType) websocket.MessageType {
-	if msgType == wsconnadapter.Text {
+func convertToNhooyrMsgTypes(msgType wsadapters.MessageType) websocket.MessageType {
+	if msgType == wsadapters.Text {
 		return websocket.MessageText
 	}
 	return websocket.MessageBinary
@@ -397,9 +397,9 @@ func convertToNhooyrMsgTypes(msgType wsconnadapter.MessageType) websocket.Messag
 // # Returns
 //
 // Converted code. Default to binary message type if no match.
-func convertFromNhooyrMsgTypes(msgType websocket.MessageType) wsconnadapter.MessageType {
+func convertFromNhooyrMsgTypes(msgType websocket.MessageType) wsadapters.MessageType {
 	if msgType == websocket.MessageText {
-		return wsconnadapter.Text
+		return wsadapters.Text
 	}
-	return wsconnadapter.Binary
+	return wsadapters.Binary
 }
