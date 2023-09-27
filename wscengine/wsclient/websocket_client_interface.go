@@ -5,13 +5,13 @@ import (
 	"net/http"
 	"sync"
 
-	adapters "github.com/gbdevw/gowsclient/wscengine/wsadapters"
+	"github.com/gbdevw/gowsclient/wscengine/wsadapters"
 )
 
 // Structure which holds data for a websocket close message.
 type CloseMessageDetails struct {
 	// Close reason code
-	CloseReason adapters.StatusCode
+	CloseReason wsadapters.StatusCode
 	// Close reason message. Can be empty.
 	CloseMessage string
 }
@@ -60,7 +60,7 @@ type WebsocketClientInterface interface {
 	OnOpen(
 		ctx context.Context,
 		resp *http.Response,
-		conn adapters.WebsocketConnectionAdapterInterface,
+		conn wsadapters.WebsocketConnectionAdapterInterface,
 		readMutex *sync.Mutex,
 		exit context.CancelFunc,
 		restarting bool) error
@@ -96,12 +96,12 @@ type WebsocketClientInterface interface {
 	//    engine and close the websocket connection.
 	OnMessage(
 		ctx context.Context,
-		conn adapters.WebsocketConnectionAdapterInterface,
+		conn wsadapters.WebsocketConnectionAdapterInterface,
 		readMutex *sync.Mutex,
 		restart context.CancelFunc,
 		exit context.CancelFunc,
 		sessionId string,
-		msgType adapters.MessageType,
+		msgType wsadapters.MessageType,
 		msg []byte)
 
 	// # Description
@@ -145,7 +145,7 @@ type WebsocketClientInterface interface {
 	//    engine and close the websocket connection.
 	OnReadError(
 		ctx context.Context,
-		conn adapters.WebsocketConnectionAdapterInterface,
+		conn wsadapters.WebsocketConnectionAdapterInterface,
 		readMutex *sync.Mutex,
 		restart context.CancelFunc,
 		exit context.CancelFunc,
@@ -184,7 +184,7 @@ type WebsocketClientInterface interface {
 	// Provided context will already be canceled.
 	OnClose(
 		ctx context.Context,
-		conn adapters.WebsocketConnectionAdapterInterface,
+		conn wsadapters.WebsocketConnectionAdapterInterface,
 		readMutex *sync.Mutex,
 		closeMessage *CloseMessageDetails) *CloseMessageDetails
 

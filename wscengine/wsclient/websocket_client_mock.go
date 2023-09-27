@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"sync"
 
-	wsadapters "github.com/gbdevw/gowsclient/wscengine/wsadapters"
+	"github.com/gbdevw/gowsclient/wscengine/wsadapters"
 	"github.com/stretchr/testify/mock"
 )
 
