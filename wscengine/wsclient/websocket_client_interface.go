@@ -2,6 +2,7 @@ package wsclient
 
 import (
 	"context"
+	"net/http"
 	"sync"
 
 	adapters "github.com/gbdevw/gowsclient/wscengine/wsadapters"
@@ -35,6 +36,7 @@ type WebsocketClientInterface interface {
 	// # Inputs
 	//
 	//	- ctx: context produced from the websocket engine context and bound to OnOpen lifecycle.
+	//	- resp: The server response to the websocket handshake.
 	//	- conn: Websocket adapter provided during engine creation. Connection is now opened.
 	//	- readMutex: A reference to engine read mutex user can lock to pause the engine.
 	//	- exit: Function to call to definitely stop the engine (ex: when stuck in retry loop).
@@ -57,6 +59,7 @@ type WebsocketClientInterface interface {
 	//		- If engine is restarting and exit has been called, engine will definitely stop.
 	OnOpen(
 		ctx context.Context,
+		resp *http.Response,
 		conn adapters.WebsocketConnectionAdapterInterface,
 		readMutex *sync.Mutex,
 		exit context.CancelFunc,

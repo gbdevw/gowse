@@ -3,6 +3,7 @@ package wsclient
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync"
 
 	wsadapters "github.com/gbdevw/gowsclient/wscengine/wsadapters"
@@ -21,12 +22,13 @@ type WebsocketClientMock struct {
 // Mocked OnOpen method
 func (mock *WebsocketClientMock) OnOpen(
 	ctx context.Context,
+	resp *http.Response,
 	conn wsadapters.WebsocketConnectionAdapterInterface,
 	readMutex *sync.Mutex,
 	exit context.CancelFunc,
 	restarting bool) error {
 	// Call mocked method with provided args and return predefined return value if any
-	args := mock.Called(ctx, conn, readMutex, exit, restarting)
+	args := mock.Called(ctx, resp, conn, readMutex, exit, restarting)
 	return args.Error(0)
 }
 
