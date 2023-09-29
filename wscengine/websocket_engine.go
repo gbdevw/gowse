@@ -45,6 +45,8 @@ type WebsocketEngine struct {
 	// Mutex used to pause the engine and prevent it from processing messages. Mutex can be locked
 	// to temporarely pause the engine and pilot the underlying websocket connection.
 	readMutex *sync.Mutex
+	// Used to ensure shutdown is performed once
+	shutdownSync *sync.Once
 }
 
 // # Description
@@ -120,6 +122,7 @@ func NewWebsocketEngine(
 		stoppedChannel: make(chan bool, 1),
 		startMutex:     &sync.Mutex{},
 		readMutex:      &sync.Mutex{},
+		shutdownSync:   &sync.Once{},
 	}, nil
 }
 
@@ -231,12 +234,6 @@ func (wsengine *WebsocketEngine) Stop(ctx context.Context) error {
 	defer span.End()
 	// Check if engine is started
 	if wsengine.started {
-		// Call engine context cancel function to start stopping the engine. The engine goroutines
-		// will all exit except one which will perform the engine shutdown by calling user OnClose
-		// callback, close the websocket connection and exit.
-		wsengine.engineStopFunc()
-		// Already unset started flag -> OK because of mutex
-		wsengine.started = false
 		// If enabled, create subcontext with timeout for stop operation
 		if wsengine.engineCfgOpts.StopTimeoutMs > 0 {
 			var stopCancel func()
@@ -245,6 +242,12 @@ func (wsengine *WebsocketEngine) Stop(ctx context.Context) error {
 				time.Duration(wsengine.engineCfgOpts.StopTimeoutMs*int64(time.Millisecond)))
 			defer stopCancel()
 		}
+		// Call engine context cancel function so engine goroutines will all exit.
+		wsengine.engineStopFunc()
+		// Perform shutdown once - Do not skip websocket connection close
+		wsengine.shutdownSync.Do(func() { wsengine.shutdownEngine(ctx, nil, false) })
+		// Already unset started flag -> OK because of mutex
+		wsengine.started = false
 		// Wait engine stop completes or times out
 		select {
 		case <-ctx.Done():
@@ -406,7 +409,7 @@ func (wsengine *WebsocketEngine) startEngine(
 					// Startup finished - Create a session context from the engine context
 					sessionCtx, sessionCancelFunc := context.WithCancel(wsengine.engineCtx)
 					// Create a monitor all goroutines will share to ensure shutdown is called once
-					shutdownSync := &sync.Once{}
+					wsengine.shutdownSync = &sync.Once{}
 					// Create a UUID which will identify the session
 					sessionUuid := uuid.New()
 					// Start the first goroutine which will run the engine.
@@ -416,7 +419,7 @@ func (wsengine *WebsocketEngine) startEngine(
 						sessionCancelFunc,
 						exit,
 						wsengine.conn,
-						shutdownSync,
+						wsengine.shutdownSync,
 						sessionUuid.String(),
 						uuid.New().String(),
 					)
@@ -427,7 +430,7 @@ func (wsengine *WebsocketEngine) startEngine(
 							sessionCancelFunc,
 							exit,
 							wsengine.conn,
-							shutdownSync,
+							wsengine.shutdownSync,
 							sessionUuid.String(),
 							uuid.New().String(),
 						)
@@ -503,8 +506,10 @@ func (wsengine *WebsocketEngine) runEngine(
 		// Check session context first for cancellation signal
 		select {
 		case <-sessionCtx.Done():
-			// Session has been canceled. Call once shutdownEngine.
-			shutdownSync.Do(func() { wsengine.shutdownEngine(ctx, nil, false) })
+			// Session has been canceled. Call once shutdownEngine by safety and exit.
+			// Skip websocket connection close as it will be closed either during Stop()
+			// or after Read returns a close error
+			shutdownSync.Do(func() { wsengine.shutdownEngine(ctx, nil, true) })
 			// Unlock read mutex - All other engine goroutines will exit
 			wsengine.readMutex.Unlock()
 			// Add event about worker exit
@@ -517,12 +522,14 @@ func (wsengine *WebsocketEngine) runEngine(
 		default:
 			// Read message
 			msgType, msg, err := wsengine.conn.Read(ctx)
-			// Check first for cancellation signal
+			// Check cancellation signal first
 			select {
 			case <-sessionCtx.Done():
-				// Session has been canceled - Call once shutdownEngine
-				shutdownSync.Do(func() { wsengine.shutdownEngine(ctx, nil, false) })
-				// Unlock read mutex - All other engine goroutines will exit
+				// Session has been canceled because of Stop() call
+				span.RecordError(sessionCtx.Err())
+				// Shutdown the engine - skip websocket connection close (Stop has handled it)
+				shutdownSync.Do(func() { wsengine.shutdownEngine(ctx, nil, true) })
+				// Unnlock mutex - All other engine goroutines will exit
 				wsengine.readMutex.Unlock()
 				// Add event about worker exit
 				span.AddEvent(eventEngineGoroutineExit, trace.WithAttributes(
@@ -570,7 +577,7 @@ func (wsengine *WebsocketEngine) runEngine(
 						case <-sessionCtx.Done():
 							// Shutdown the engine - do not skip websocket connection close
 							shutdownSync.Do(func() { wsengine.shutdownEngine(ctx, nil, false) })
-							// Unnlock mutex - All other engine goroutines will exit
+							// Unlock mutex - All other engine goroutines will exit
 							wsengine.readMutex.Unlock()
 							// Add event about worker exit
 							span.AddEvent(eventEngineGoroutineExit, trace.WithAttributes(
@@ -598,8 +605,8 @@ func (wsengine *WebsocketEngine) runEngine(
 
 // # Description
 //
-// Stop the engine. Method will call OnClose callback and close connection if needed or required.
-// Finally, method will create a new goroutine which will execute onEngineShutdown.
+// Method called when engine has to restart or stop. Method will close the websocket connection
+// if requuired with the provided close message or a defalt one (1001 - Going away).
 //
 // Method MUST be called once when engine stops. It is up to the engine developper to ensure this.
 //
@@ -608,7 +615,7 @@ func (wsengine *WebsocketEngine) runEngine(
 // # Inputs
 //
 //   - ctx: Context used for tracing purpose.
-//   - closeMessage: Close message received from the server or generated by engine, if any.
+//   - closeMessage: Close message to use to close websocket connection. Can be nil.
 //   - skipWebsocketClose: Skip connection close (because connection is already closed).
 func (wsengine *WebsocketEngine) shutdownEngine(
 	ctx context.Context,
@@ -624,12 +631,11 @@ func (wsengine *WebsocketEngine) shutdownEngine(
 		))
 	defer span.End()
 	defer span.SetStatus(codes.Ok, codes.Ok.String())
-	// Call onClose
+	// Call OnClose callback
 	cmsg := wsengine.wsclient.OnClose(ctx, wsengine.conn, wsengine.readMutex, closeMessage)
 	// Skip close if instructed to
 	if !skipWebsocketClose {
 		if cmsg == nil {
-			// Set default close message if needed
 			cmsg = &wsclient.CloseMessageDetails{
 				CloseReason:  wsadapters.GoingAway,
 				CloseMessage: "Going away",
@@ -717,7 +723,7 @@ func (wsengine *WebsocketEngine) restartEngine(
 			// Create internal channel to wait for the engine start completion signal
 			startupChannel := make(chan error, 1)
 			// Start a goroutine that will kick off the websocket engine.
-			go wsengine.startEngine(ctx, true, startupChannel, exit)
+			go wsengine.startEngine(timeoutCtx, true, startupChannel, exit)
 			// Read from error channel or context done channel to know when the engine has finished
 			// starting or if a timeout has occured or if engine context has been canceled.
 			var err error
