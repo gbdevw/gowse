@@ -260,7 +260,7 @@ func (suite *WebsocketEngineUnitTestSuite) TestStartWithTimeoutError() {
 		Run(func(args mock.Arguments) {
 			time.Sleep(time.Duration(timeoutMs*2) * time.Millisecond)
 		}).
-		Return((*http.Response)(nil), nil)
+		Return((*http.Response)(nil), fmt.Errorf("will error"))
 	// Create engine
 	engine, err := NewWebsocketEngine(srvUrl, connMock, clientMock, opts, nil)
 	require.NoError(suite.T(), err)
