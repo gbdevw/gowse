@@ -146,7 +146,7 @@ func (decorator *websocketClientInstrumentationDecorator) OnRestartError(
 	err error,
 	retryCount int) {
 	// Start span
-	ctx, span := decorator.tracer.Start(ctx, spanEngineOnCloseError,
+	ctx, span := decorator.tracer.Start(ctx, spanEngineOnRestartError,
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(
 			attribute.Int(attrRetryCount, retryCount),
