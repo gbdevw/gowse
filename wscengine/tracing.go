@@ -1,5 +1,10 @@
 package wscengine
 
+import (
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+)
+
 /*************************************************************************************************/
 /* TRACING RELATED CONSTANTS                                                                     */
 /*************************************************************************************************/
@@ -7,9 +12,9 @@ package wscengine
 // Constants used for tracing purpose.
 const (
 	// Package name used by library tracer
-	PkgName = "wscengine"
+	pkgName = "wscengine"
 	// Package version
-	PkgVersion = "0.0.0"
+	pkgVersion = "0.0.0"
 
 	// Namespace used by spans, events and attributes
 	namespace = "wscengine"
@@ -44,7 +49,7 @@ const (
 	spanEngineOnRestartError = callbacksNamespace + ".on_restart_error"
 
 	// Event used in span to signal engine goroutine has exited
-	eventEngineGoroutineExit = namespace + ".goroutine_exit"
+	eventEngineGoroutineExit = namespace + ".worker_exit"
 	// Event used in span to signal connection has been closed
 	eventConnectionClosed = namespace + ".connection_closed"
 	// Event used in span to indicate engine definitely stops
@@ -59,17 +64,76 @@ const (
 	// Attribute used to store engine session ID.
 	attrSessionId = namespace + ".session_id"
 	// Attribute used to store goroutine ID
-	attrGoroutineId = namespace + ".goroutine_id"
+	attrGoroutineId = namespace + ".worker_id"
 	// Attribute used to indicate whether connection close should be skipped or not on shutdown
 	attrSkipCloseConnection = namespace + ".skip_close_connection"
 	// Attribute used to indicate whether a close message was received prior shutdown
 	attrHasCloseMessage = namespace + ".has_close_message"
 	// Attribute used to indicate received message length
-	attrMsgLength = namespace + ".message_length"
+	attrMsgLength = namespace + ".message.length"
 	// Attribute used to indicate received message type
-	attrMsgType = namespace + ".message_type"
+	attrMsgType = namespace + ".message.opcode"
 	// Attribute used to indicate whether engine has auto reconnect enabled
 	attrAutoReconnect = namespace + ".auto_reconnect"
 	// Attribute used to count the number of retries performed
 	attrRetryCount = namespace + ".retry_count"
 )
+
+// # Description
+//
+// The function records the input error in the provided span using span.RecordError(err) and set
+// the span status with the provided code and description. The function returns the provided error.
+//
+// # Usage tips
+//
+// The function is meant to replace code blocks like this one:
+//
+//	if err != nil {
+//			span.RecordError(err)
+//			span.SetStatus(code, description)
+//			return err
+//	}
+//
+// By:
+//
+//	if err != nil {
+//			return handleError(err, span, code, description)
+//	}
+func handleError(err error, span trace.Span, code codes.Code, description string) error {
+	span.RecordError(err)
+	span.SetStatus(code, description)
+	return err
+}
+
+// # Description
+//
+// If the error is not nil, the function records the input error in the provided span and set the
+// span status with an error code and description. In the other case, the span status is set with
+// a Ok code. The function returns the provided error in all cases.
+//
+// # Usage tips
+//
+// The function is meant to replace code blocks like this one:
+//
+//		if err != nil {
+//				span.RecordError(err)
+//				span.SetStatus(codes.Error, codes.Error.String())
+//				return err
+//		} else {
+//			span.SetStatus(codes.Ok, codes.Ok.String())
+//			return nil
+//	}
+//
+// By:
+//
+//	return handlePotentialError(err, span)
+func handlePotentialError(err error, span trace.Span) error {
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, codes.Error.String())
+		return err
+	} else {
+		span.SetStatus(codes.Ok, codes.Ok.String())
+		return nil
+	}
+}
