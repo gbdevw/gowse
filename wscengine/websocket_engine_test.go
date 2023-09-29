@@ -3,22 +3,22 @@ package wscengine
 import (
 	"context"
 	"fmt"
-	"net"
+	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/gbdevw/gowsclient/demowsserver"
-	adapters "github.com/gbdevw/gowsclient/wscengine/wsadapters"
+	"github.com/gbdevw/gowsclient/echowsserver"
+	"github.com/gbdevw/gowsclient/wscengine/wsadapters"
 	wsadapternhooyr "github.com/gbdevw/gowsclient/wscengine/wsadapters/nhooyr"
 	"github.com/gbdevw/gowsclient/wscengine/wsclient"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"nhooyr.io/websocket"
 )
 
 /*************************************************************************************************/
@@ -38,7 +38,7 @@ func TestWebsocketEngineUnitTestSuite(t *testing.T) {
 // Test suite used to test WebsocketEngine against a live websocket server
 type WebsocketEngineIntegrationTestSuite struct {
 	suite.Suite
-	srv    *demowsserver.DemoWebsocketServer
+	srv    *echowsserver.EchoWebsocketServer
 	srvUrl *url.URL
 }
 
@@ -51,11 +51,10 @@ func TestWebsocketEngineIntegrationTestSuite(t *testing.T) {
 func (suite *WebsocketEngineIntegrationTestSuite) SetupSuite() {
 	// Create server
 	host := "localhost:8081"
-	srv, err := demowsserver.NewDemoWebsocketServer(context.Background(), &http.Server{Addr: host}, nil, nil)
-	require.NoError(suite.T(), err)
+	srv := echowsserver.NewEchoWebsocketServer(&http.Server{Addr: host}, log.New(io.Discard, "", log.Flags()))
 	require.NotNil(suite.T(), srv)
 	// Start server
-	err = srv.Start()
+	err := srv.Start()
 	require.NoError(suite.T(), err)
 	// Assign server to suite
 	suite.srv = srv
@@ -99,11 +98,11 @@ func (suite *WebsocketEngineUnitTestSuite) TestOnReadErrorHandlingAndThenShutdow
 	connReadErr := fmt.Errorf("mocked conn.Read error")
 	// Expected OnClose returned close message
 	closeMsg := wsclient.CloseMessageDetails{
-		CloseReason:  adapters.GoingAway,
+		CloseReason:  wsadapters.GoingAway,
 		CloseMessage: "client shutdown the connection after error",
 	}
 	// Create & configure connection mock
-	connMock := adapters.NewWebsocketConnectionAdapterInterfaceMock()
+	connMock := wsadapters.NewWebsocketConnectionAdapterInterfaceMock()
 	connMock.
 		On("Read", mock.Anything).Return(-1, []byte{}, connReadErr).
 		On("Close", mock.Anything, closeMsg.CloseReason, closeMsg.CloseMessage).Return(nil)
@@ -170,13 +169,13 @@ func (suite *WebsocketEngineUnitTestSuite) TestShutdownAfterReadMutexUnlock() {
 	ctx, cancel := context.WithCancel(context.Background())
 	// Expected OnClose returned close message
 	closeMsg := wsclient.CloseMessageDetails{
-		CloseReason:  adapters.GoingAway,
+		CloseReason:  wsadapters.GoingAway,
 		CloseMessage: "client shutdown the connection after error",
 	}
 	// Create & configure connection mock
-	connMock := adapters.NewWebsocketConnectionAdapterInterfaceMock()
+	connMock := wsadapters.NewWebsocketConnectionAdapterInterfaceMock()
 	connMock.
-		On("Close", mock.Anything, closeMsg.CloseReason, closeMsg.CloseMessage).Return(nil)
+		On("Close", mock.Anything, closeMsg.CloseReason, mock.Anything).Return(nil)
 	// Configure OnReadError mock which does nothing on first call and
 	// call the provided engine exit function on second call
 	mockWsClient := wsclient.NewWebsocketClientMock()
@@ -213,7 +212,7 @@ func (suite *WebsocketEngineUnitTestSuite) TestShutdownAfterReadMutexUnlock() {
 	// Read on stop channel to know when goroutine has finished
 	<-engine.stoppedChannel
 	// Check on mocks
-	connMock.AssertNumberOfCalls(suite.T(), "Close", 1)
+	connMock.AssertNumberOfCalls(suite.T(), "Close", 0)
 	mockWsClient.AssertNumberOfCalls(suite.T(), "OnClose", 1)
 	mockWsClient.AssertNumberOfCalls(suite.T(), "OnCloseError", 0)
 }
@@ -229,7 +228,7 @@ func (suite *WebsocketEngineUnitTestSuite) TestStartWithCanceledCtx() {
 	srvUrl, err := url.Parse("ws://localhost")
 	require.NoError(suite.T(), err)
 	// Create Conn& Client mocks
-	connMock := adapters.NewWebsocketConnectionAdapterInterfaceMock()
+	connMock := wsadapters.NewWebsocketConnectionAdapterInterfaceMock()
 	clientMock := wsclient.NewWebsocketClientMock()
 	// Create engine
 	engine, err := NewWebsocketEngine(srvUrl, connMock, clientMock, nil, nil)
@@ -253,7 +252,7 @@ func (suite *WebsocketEngineUnitTestSuite) TestStartWithTimeoutError() {
 	srvUrl, err := url.Parse("ws://localhost")
 	require.NoError(suite.T(), err)
 	// Create Conn & Client mocks
-	connMock := adapters.NewWebsocketConnectionAdapterInterfaceMock()
+	connMock := wsadapters.NewWebsocketConnectionAdapterInterfaceMock()
 	connMock.On("Close", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	clientMock := wsclient.NewWebsocketClientMock()
 	// Configure connMock Dial to wait enough time to trigger the timeout
@@ -286,14 +285,14 @@ func (suite *WebsocketEngineUnitTestSuite) TestStartWithOnOpenError() {
 	srvUrl, err := url.Parse("ws://localhost")
 	require.NoError(suite.T(), err)
 	// Create Conn & Client mocks
-	connMock := adapters.NewWebsocketConnectionAdapterInterfaceMock()
+	connMock := wsadapters.NewWebsocketConnectionAdapterInterfaceMock()
 	clientMock := wsclient.NewWebsocketClientMock()
 	// Configure connMock Dial and Close to succeed
 	connMock.
 		On("Dial", mock.Anything, mock.Anything).Return((*http.Response)(nil), nil).
-		On("Close", mock.Anything, adapters.GoingAway, mock.Anything).Return(nil)
+		On("Close", mock.Anything, wsadapters.GoingAway, mock.Anything).Return(nil)
 	// Configure client mock OnOpen to return an error when called
-	clientMock.On("OnOpen", mock.Anything, mock.Anything, mock.Anything, mock.Anything, false).
+	clientMock.On("OnOpen", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, false).
 		Return(expectedErr)
 	// Create engine
 	engine, err := NewWebsocketEngine(srvUrl, connMock, clientMock, nil, nil)
@@ -320,7 +319,7 @@ func (suite *WebsocketEngineUnitTestSuite) TestStartEngineWithCanceledCtx() {
 	srvUrl, err := url.Parse("ws://localhost")
 	require.NoError(suite.T(), err)
 	// Create Conn & Client mocks
-	connMock := adapters.NewWebsocketConnectionAdapterInterfaceMock()
+	connMock := wsadapters.NewWebsocketConnectionAdapterInterfaceMock()
 	clientMock := wsclient.NewWebsocketClientMock()
 	// Create engine
 	engine, err := NewWebsocketEngine(srvUrl, connMock, clientMock, nil, nil)
@@ -350,7 +349,7 @@ func (suite *WebsocketEngineUnitTestSuite) TestStartEngineWithEngineAlreadyStart
 	srvUrl, err := url.Parse("ws://localhost")
 	require.NoError(suite.T(), err)
 	// Create Conn & Client mocks
-	connMock := adapters.NewWebsocketConnectionAdapterInterfaceMock()
+	connMock := wsadapters.NewWebsocketConnectionAdapterInterfaceMock()
 	clientMock := wsclient.NewWebsocketClientMock()
 	// Create engine
 	engine, err := NewWebsocketEngine(srvUrl, connMock, clientMock, nil, nil)
@@ -380,7 +379,7 @@ func (suite *WebsocketEngineUnitTestSuite) TestStopWithEngineNotStarted() {
 	srvUrl, err := url.Parse("ws://localhost")
 	require.NoError(suite.T(), err)
 	// Create Conn & Client mocks
-	connMock := adapters.NewWebsocketConnectionAdapterInterfaceMock()
+	connMock := wsadapters.NewWebsocketConnectionAdapterInterfaceMock()
 	clientMock := wsclient.NewWebsocketClientMock()
 	// Create engine
 	engine, err := NewWebsocketEngine(srvUrl, connMock, clientMock, nil, nil)
@@ -389,31 +388,6 @@ func (suite *WebsocketEngineUnitTestSuite) TestStopWithEngineNotStarted() {
 	// Call stop
 	err = engine.Stop(context.Background())
 	require.Error(suite.T(), err)
-}
-
-// # Description
-//
-// Test will ensure Stop method returns an error when called with a canceled context.
-func (suite *WebsocketEngineUnitTestSuite) TestStopWithCanceledCtx() {
-	// Create canceled context
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	// Create valid URL
-	srvUrl, err := url.Parse("ws://localhost")
-	require.NoError(suite.T(), err)
-	// Create Conn & Client mocks
-	connMock := adapters.NewWebsocketConnectionAdapterInterfaceMock()
-	connMock.On("Close", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-	clientMock := wsclient.NewWebsocketClientMock()
-	// Create engine
-	engine, err := NewWebsocketEngine(srvUrl, connMock, clientMock, nil, nil)
-	require.NoError(suite.T(), err)
-	require.NotNil(suite.T(), engine)
-	// Set started flag
-	engine.started = true
-	// Call stop
-	err = engine.Stop(ctx)
-	require.ErrorIs(suite.T(), err, ctx.Err())
 }
 
 // # Description
@@ -432,7 +406,7 @@ func (suite *WebsocketEngineUnitTestSuite) TestRestartEngineErrorPath() {
 	srvUrl, err := url.Parse("ws://localhost")
 	require.NoError(suite.T(), err)
 	// Create Conn & Client mocks
-	connMock := adapters.NewWebsocketConnectionAdapterInterfaceMock()
+	connMock := wsadapters.NewWebsocketConnectionAdapterInterfaceMock()
 	clientMock := wsclient.NewWebsocketClientMock()
 	// Configure conn.Dial to fail to fail engine restart
 	dialErr := fmt.Errorf("error on dial call")
@@ -486,7 +460,7 @@ func (suite *WebsocketEngineUnitTestSuite) TestGetReadMutex() {
 	srvUrl, err := url.Parse("ws://localhost")
 	require.NoError(suite.T(), err)
 	// Create Conn & Client mocks
-	connMock := adapters.NewWebsocketConnectionAdapterInterfaceMock()
+	connMock := wsadapters.NewWebsocketConnectionAdapterInterfaceMock()
 	clientMock := wsclient.NewWebsocketClientMock()
 	// Create engine
 	engine, err := NewWebsocketEngine(srvUrl, connMock, clientMock, nil, nil)
@@ -511,7 +485,7 @@ func (suite *WebsocketEngineUnitTestSuite) TestEngineFactoryInvalidParameters() 
 	srvUrl, err := url.Parse("ws://localhost")
 	require.NoError(suite.T(), err)
 	// Create Conn& Client mocks
-	connMock := adapters.NewWebsocketConnectionAdapterInterfaceMock()
+	connMock := wsadapters.NewWebsocketConnectionAdapterInterfaceMock()
 	clientMock := wsclient.NewWebsocketClientMock()
 	// Create invalid options
 	invalidOpts := NewWebsocketEngineConfigurationOptions().
@@ -553,12 +527,11 @@ func (suite *WebsocketEngineIntegrationTestSuite) TestOnOpenAndOnClose() {
 	// Create websocket client mock
 	wsClientMock := wsclient.NewWebsocketClientMock()
 	// Configure mock
-	wsClientMock.On("OnOpen", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-	wsClientMock.On("OnClose", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-	// Connection is closed before actual call to conn.Close occurs
-	wsClientMock.On("OnCloseError", mock.Anything, mock.Anything)
+	wsClientMock.On("OnOpen", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).
+		On("OnClose", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).
+		On("OnCloseError", mock.Anything, mock.Anything).Return(nil)
 	// Create engine
-	conn := wsadapternhooyr.NewNhooyrWebsocketConnectionAdapter(nil, nil)
+	conn := wsadapternhooyr.NewNhooyrWebsocketConnectionAdapter(nil)
 	engine, err := NewWebsocketEngine(suite.srvUrl, conn, wsClientMock, nil, nil)
 	require.NoError(suite.T(), err)
 	require.NotNil(suite.T(), engine)
@@ -592,12 +565,9 @@ func (suite *WebsocketEngineIntegrationTestSuite) TestOnOpenAndOnClose() {
 	wsClientMock.AssertNumberOfCalls(suite.T(), "OnOpen", 1)
 	wsClientMock.AssertNumberOfCalls(suite.T(), "OnClose", 1)
 	wsClientMock.AssertNumberOfCalls(suite.T(), "OnReadError", 0)
-	wsClientMock.AssertNumberOfCalls(suite.T(), "OnCloseError", 1)
+	wsClientMock.AssertNumberOfCalls(suite.T(), "OnCloseError", 0)
 	wsClientMock.AssertNumberOfCalls(suite.T(), "OnMessage", 0)
 	wsClientMock.AssertNumberOfCalls(suite.T(), "OnRestartError", 0)
-	// Verify OnCloseError is because connection is already closed
-	err = wsClientMock.Calls[2].Arguments.Error(1)
-	require.ErrorIs(suite.T(), err, net.ErrClosed)
 }
 
 // # Description
@@ -615,23 +585,21 @@ func (suite *WebsocketEngineIntegrationTestSuite) TestClientSession() {
 	// Create websocket client mock
 	wsClientMock := wsclient.NewWebsocketClientMock()
 	// Configure mock
-	wsClientMock.On("OnOpen", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-	wsClientMock.On("OnClose", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-	wsClientMock.On("OnMessage", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
-	// Connection is closed before actual call to conn.Close occurs
-	wsClientMock.On("OnCloseError", mock.Anything, mock.Anything)
+	wsClientMock.On("OnOpen", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).
+		On("OnClose", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).
+		On("OnMessage", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		On("OnCloseError", mock.Anything, mock.Anything)
 	// Create engine
-	conn := wsadapternhooyr.NewNhooyrWebsocketConnectionAdapter(nil, nil)
+	conn := wsadapternhooyr.NewNhooyrWebsocketConnectionAdapter(nil)
 	engine, err := NewWebsocketEngine(suite.srvUrl, conn, wsClientMock, nil, nil)
 	require.NoError(suite.T(), err)
 	require.NotNil(suite.T(), engine)
 	// Start the engine
 	count := 0
 	retryLimit := 3
-	for count < 3 {
+	for count = 0; count < retryLimit; count++ {
 		err = engine.Start(context.Background())
 		if err != nil {
-			count = count + 1
 			time.Sleep(2 * time.Second)
 		} else {
 			break
@@ -646,13 +614,13 @@ func (suite *WebsocketEngineIntegrationTestSuite) TestClientSession() {
 	// Send 4 echo requests
 	expectedEcho := "hello"
 	req1 := fmt.Sprintf(`{"type":"echo_request", "echo": "%s"}`, expectedEcho)
-	err = conn.Write(context.Background(), adapters.Text, []byte(req1))
+	err = conn.Write(context.Background(), wsadapters.Text, []byte(req1))
 	require.NoError(suite.T(), err)
-	err = conn.Write(context.Background(), adapters.Text, []byte(req1))
+	err = conn.Write(context.Background(), wsadapters.Text, []byte(req1))
 	require.NoError(suite.T(), err)
-	err = conn.Write(context.Background(), adapters.Text, []byte(req1))
+	err = conn.Write(context.Background(), wsadapters.Text, []byte(req1))
 	require.NoError(suite.T(), err)
-	err = conn.Write(context.Background(), adapters.Text, []byte(req1))
+	err = conn.Write(context.Background(), wsadapters.Text, []byte(req1))
 	require.NoError(suite.T(), err)
 	// Sleep
 	time.Sleep(5 * time.Second)
@@ -668,7 +636,7 @@ func (suite *WebsocketEngineIntegrationTestSuite) TestClientSession() {
 	wsClientMock.AssertNumberOfCalls(suite.T(), "OnOpen", 1)
 	wsClientMock.AssertNumberOfCalls(suite.T(), "OnClose", 1)
 	wsClientMock.AssertNumberOfCalls(suite.T(), "OnReadError", 0)
-	wsClientMock.AssertNumberOfCalls(suite.T(), "OnCloseError", 1)
+	wsClientMock.AssertNumberOfCalls(suite.T(), "OnCloseError", 0)
 	wsClientMock.AssertNumberOfCalls(suite.T(), "OnMessage", 4)
 	wsClientMock.AssertNumberOfCalls(suite.T(), "OnRestartError", 0)
 	// Verify OnMessage calls
@@ -701,12 +669,11 @@ func (suite *WebsocketEngineIntegrationTestSuite) TestEngineAutoReconnect() {
 	// Create websocket client mock
 	wsClientMock := wsclient.NewWebsocketClientMock()
 	// Configure mock
-	wsClientMock.On("OnOpen", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-	wsClientMock.On("OnClose", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-	// Connection is closed before actual call to conn.Close occurs
-	wsClientMock.On("OnCloseError", mock.Anything, mock.Anything)
+	wsClientMock.On("OnOpen", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).
+		On("OnClose", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).
+		On("OnCloseError", mock.Anything, mock.Anything)
 	// Create engine
-	conn := wsadapternhooyr.NewNhooyrWebsocketConnectionAdapter(nil, nil)
+	conn := wsadapternhooyr.NewNhooyrWebsocketConnectionAdapter(nil)
 	engine, err := NewWebsocketEngine(suite.srvUrl, conn, wsClientMock, nil, nil)
 	require.NoError(suite.T(), err)
 	require.NotNil(suite.T(), engine)
@@ -730,12 +697,8 @@ func (suite *WebsocketEngineIntegrationTestSuite) TestEngineAutoReconnect() {
 	require.NoError(suite.T(), err)
 	// Check engine IsStarted
 	require.True(suite.T(), engine.IsStarted())
-	// Shutdown the client connections
-	expectedSrvCloseMsg := demowsserver.CloseMessage{
-		Code:   websocket.StatusGoingAway,
-		Reason: "Server shutdown connections",
-	}
-	suite.srv.CloseClientConnections(expectedSrvCloseMsg)
+	// Shutdown the client connection
+	conn.Close(context.Background(), wsadapters.GoingAway, "interruption")
 	// Wait & check engine is still started
 	time.Sleep(3 * time.Second)
 	require.True(suite.T(), engine.IsStarted())
@@ -755,17 +718,13 @@ func (suite *WebsocketEngineIntegrationTestSuite) TestEngineAutoReconnect() {
 	require.False(suite.T(), engine.IsStarted())
 	// Check mock OnOpen and OnClose were called
 	wsClientMock.AssertNumberOfCalls(suite.T(), "OnOpen", 2)
-	wsClientMock.Calls[0].Arguments.Assert(suite.T(), mock.Anything, mock.Anything, mock.Anything, mock.Anything, false)
-	wsClientMock.Calls[2].Arguments.Assert(suite.T(), mock.Anything, mock.Anything, mock.Anything, mock.Anything, true)
+	wsClientMock.Calls[0].Arguments.Assert(suite.T(), mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, false)
+	wsClientMock.Calls[2].Arguments.Assert(suite.T(), mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, true)
 	wsClientMock.AssertNumberOfCalls(suite.T(), "OnClose", 2)
 	require.NotNil(suite.T(), wsClientMock.Calls[1].Arguments.Get(2)) // Must have a close message as server shutdown the connection (eiter with or without a close message)
 	require.Nil(suite.T(), wsClientMock.Calls[3].Arguments.Get(3))    // Calling stop = no closeMessage in OnClose callback
 	wsClientMock.AssertNumberOfCalls(suite.T(), "OnReadError", 0)
-	// Know issue -> When stopping engine using Stop, connection is closed before conn.Close call
-	// The underlying websocket library used by the nhooyr adapter closes by itself the connection
-	// when parent context is canceled. That is the case when Stop is called -> engine context is
-	// canceled and engine context is the one used to create all other context.
-	wsClientMock.AssertNumberOfCalls(suite.T(), "OnCloseError", 1)
+	wsClientMock.AssertNumberOfCalls(suite.T(), "OnCloseError", 0)
 	wsClientMock.AssertNumberOfCalls(suite.T(), "OnMessage", 0)
 	wsClientMock.AssertNumberOfCalls(suite.T(), "OnRestartError", 0)
 }

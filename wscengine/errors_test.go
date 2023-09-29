@@ -29,8 +29,9 @@ func TestEngineStartErrorUnitTestSuite(t *testing.T) {
 // Test Error
 func (suite *WebsocketEngineOptionsUnitTestSuite) TestError() {
 	// Expectations
-	expected := "websocket engine failed to start"
-	require.Equal(suite.T(), expected, EngineStartError{}.Error())
+	err := fmt.Errorf("root error")
+	expected := fmt.Sprint("websocket engine failed to start: ", err)
+	require.Equal(suite.T(), expected, EngineStartError{Err: err}.Error())
 }
 
 // Test Unwrap

@@ -13,7 +13,7 @@ type EngineStartError struct {
 }
 
 func (err EngineStartError) Error() string {
-	return fmt.Sprintf("websocket engine failed to start: %s", err.Err.Error())
+	return fmt.Sprintf("websocket engine failed to start: %v", err.Err)
 }
 
 func (err EngineStartError) Unwrap() error {
