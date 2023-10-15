@@ -191,6 +191,8 @@ func (adapter *NhooyrWebsocketConnectionAdapter) Read(ctx context.Context) (wsad
 		if err != nil {
 			// Check if error is due to connection being closed
 			if websocket.CloseStatus(err) != -1 || errors.Is(err, io.EOF) {
+				// Drop the existing connection so a new one can be established
+				adapter.conn = nil
 				// Error is because connection has been closed
 				if websocket.CloseStatus(err) != -1 {
 					// We have a close status code - return typed error

@@ -237,6 +237,8 @@ func (adapter *GorillaWebsocketConnectionAdapter) Read(ctx context.Context) (wsc
 		if err != nil {
 			// Check if close error
 			if ce, ok := err.(*websocket.CloseError); ok {
+				// Drop the existing connection so a new one can be established
+				adapter.conn = nil
 				// Connection is closed
 				closeErr := wsconnadapter.WebsocketCloseError{
 					Code:   wsconnadapter.StatusCode(ce.Code),

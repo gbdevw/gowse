@@ -106,6 +106,7 @@ type WebsocketConnectionAdapterInterface interface {
 	//
 	//	- Read MUST return a WebsocketCloseError either if a close message is read or if connection
 	//    is closed without a close message. In the later case, the 1006 status code MUST be used.
+	//    Read MUST drop the existing connection so a new one can be established.
 	//
 	//	- Read MUST block until a message is read from the server or until connection is closed.
 	//
