@@ -1,4 +1,4 @@
-package wsadaptergorilla
+package gorilla
 
 import (
 	"context"

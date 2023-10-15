@@ -1,6 +1,6 @@
 // Package which contains a WebsocketConnectionAdapterInterface implementation for
 // nhooyr/websocket library (https://github.com/nhooyr/websocket).
-package wsadapternhooyr
+package nhooyr
 
 import (
 	"context"

@@ -1,4 +1,4 @@
-package wsadapternhooyr
+package nhooyr
 
 import (
 	"context"

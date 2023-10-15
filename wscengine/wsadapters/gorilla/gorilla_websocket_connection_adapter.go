@@ -1,6 +1,6 @@
 // Package which contains a WebsocketConnectionAdapterInterface implementation for
 // gorilla/websocket library (https://github.com/gorilla/websocket).
-package wsadaptergorilla
+package gorilla
 
 import (
 	"context"
