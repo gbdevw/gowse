@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/gbdevw/gowsclient/example/configuration"
+	"github.com/gbdevw/gowsclient/example/client/configuration"
 	"go.opentelemetry.io/otel"
 	jaeger "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -26,7 +26,7 @@ func ProvideTracerProvider(ctx context.Context, config configuration.Configurati
 			sdktrace.WithSampler(sdktrace.AlwaysSample()),
 			sdktrace.WithResource(resource.NewWithAttributes(
 				semconv.SchemaURL,
-				semconv.ServiceNameKey.String("wsclient.example"),
+				semconv.ServiceNameKey.String("wsclient.example.client"),
 				semconv.DeploymentEnvironmentKey.String("production"),
 			)),
 		)

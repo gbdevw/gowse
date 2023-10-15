@@ -3,8 +3,9 @@ package providers
 import (
 	"context"
 	"net/url"
+	"time"
 
-	"github.com/gbdevw/gowsclient/example/configuration"
+	"github.com/gbdevw/gowsclient/example/client/configuration"
 	"github.com/gbdevw/gowsclient/wscengine"
 	"github.com/gbdevw/gowsclient/wscengine/wsadapters"
 	"github.com/gbdevw/gowsclient/wscengine/wsclient"
@@ -31,7 +32,20 @@ func ProvideWebsocketClienEngine(
 	// Register Start and Stop hooks to Start and Stop the engine
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			return engine.Start(ctx)
+			// Attempt 3 times to start
+			attempts := 0
+			var err error = nil
+			for attempts < 3 {
+				err := engine.Start(ctx)
+				if err == nil {
+					// Exit - success
+					return nil
+				}
+				// Wait a bit before retry
+				time.Sleep(2 * time.Second)
+			}
+			// Return error
+			return err
 		},
 		OnStop: func(ctx context.Context) error {
 			return engine.Stop(ctx)

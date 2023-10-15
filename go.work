@@ -2,6 +2,7 @@ go 1.21.1
 
 use (
 	./echowsserver
-	./example
+	./example/client
+	./example/server
 	./wscengine
 )

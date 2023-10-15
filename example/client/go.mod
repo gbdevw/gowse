@@ -1,9 +1,8 @@
-module github.com/gbdevw/gowsclient/example
+module github.com/gbdevw/gowsclient/example/client
 
 go 1.21.1
 
 require (
-	github.com/gbdevw/gowsclient/demowsserver v0.0.0-20230919104747-999f64e74161
 	go.opentelemetry.io/otel v1.18.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.18.0
 	go.opentelemetry.io/otel/sdk v1.18.0
