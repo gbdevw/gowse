@@ -1,8 +1,10 @@
 services:
   client:
-    build: ./client
+    build: 
+      context: .
+      dockerfile: Dockerfile-client
     environment:
-      - WSCEX_SERVER_URL=ws://localhost:8080
+      - WSCEX_SERVER_URL=ws://server:8081
       - WSCEX_TRACING_ENABLED=1
       - WSCEX_TRACING_JAEGER_ENDPOINT=jaeger:4318
     depends_on:
@@ -15,6 +17,8 @@ services:
     depends_on:
       - server
   server:
-    build: ./server
+    build: 
+      context: .
+      dockerfile: Dockerfile-server
     ports:
       - "8080:8080"
