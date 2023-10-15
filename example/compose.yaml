@@ -1,6 +1,6 @@
 services:
   client:
-    build: ./example/client
+    build: ./client
     environment:
       - WSCEX_SERVER_URL=ws://localhost:8080
       - WSCEX_TRACING_ENABLED=1
@@ -15,6 +15,6 @@ services:
     depends_on:
       - server
   server:
-    build: ./example/server
+    build: ./server
     ports:
       - "8080:8080"
