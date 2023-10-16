@@ -1,4 +1,5 @@
 # Go Websocket Client
+![Coverage](https://img.shields.io/badge/Coverage-95.1%25-brightgreen)
 
 A callback based framework and engine to build websocket clients in Golang, inspired from javax.websocket.
 
