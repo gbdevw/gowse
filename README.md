@@ -2,6 +2,16 @@
 
 A callback based framework and engine to build websocket clients in Golang, inspired from javax.websocket.
 
+## Status
+
+- This is an alpha release: The websocket engine can be used in other projects, but the API and code stability are not yet guaranteed, nor is the complete absence of bugs.
+- A stable release will be released once the project has been successfully used in a first internal project.
+
+## Contribute
+
+- This project is actively maintained. 
+- Please file an issue if you want to report bugs or make recommendations about the code or the way it is managed.
+
 ## Features
 
 - **Implementing a websocket client in Go with six callbacks**: OnOpen, OnMessage, OnClose, OnReadError, OnCloseError & OnRestartError.
@@ -15,6 +25,12 @@ A callback based framework and engine to build websocket clients in Golang, insp
 
 ## Usage
 
+Import the websocket engine in your go project:
+
+```
+go get -u github.com/gbdevw/gowsclient/wscengine
+```
+
 ### Callbacks
 
 Additional explanation of callbacks that need to be implemented by the websocket client endpoint can be found [here](./documentation/callbacks.md).
@@ -25,7 +41,22 @@ Additional explanation about how the engine works and interact with users provid
 
 ### Example
 
-TODO
+An example of a client for the [echowsserver](./echowsserver/echo_websocket_server.go) is available under [example/client](./example/client/websocket/client.go). The client opens a connection to the echo websocket server and exchange messages with the server every 5 seconds. 
+
+When the connection is established, the client engine calls OnOpen callback, which sends an initial message to the server. The server responds with an echo. When an echo is received, the OnMessage callback is called by the client engine. The callback implementation is very simple: It waits 5 seconds before sending a new message to the server, which replies. The response triggers the OnMessage callback again. This continues until either the server or the client is shut down.
+
+The simplest way to run the example is to use the [docker compose file](./compose.yaml):
+
+```
+docker-compose up
+```
+
+The docker compose file will start 3 containers:
+- The websocket server
+- The client
+- A all-in-one jaeger instance
+
+The user can connect to the the jaeger instance on port 16686 to see the traces produced by the client (and the websocket engine).
 
 ### Request-Response over Websocket
 
