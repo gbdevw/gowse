@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/gbdevw/gowsclient/wscengine/wsadapters"
-	"github.com/gbdevw/gowsclient/wscengine/wsclient"
+	"github.com/gbdevw/gowse/wscengine/wsadapters"
+	"github.com/gbdevw/gowse/wscengine/wsclient"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"

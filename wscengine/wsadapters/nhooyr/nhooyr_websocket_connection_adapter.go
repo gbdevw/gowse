@@ -12,7 +12,7 @@ import (
 	"net/url"
 	"sync"
 
-	"github.com/gbdevw/gowsclient/wscengine/wsadapters"
+	"github.com/gbdevw/gowse/wscengine/wsadapters"
 	"nhooyr.io/websocket"
 )
 

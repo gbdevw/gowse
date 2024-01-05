@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gbdevw/gowsclient/echowsserver"
-	"github.com/gbdevw/gowsclient/wscengine/wsadapters"
+	"github.com/gbdevw/gowse/echowsserver"
+	"github.com/gbdevw/gowse/wscengine/wsadapters"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"

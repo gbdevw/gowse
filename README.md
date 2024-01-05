@@ -1,4 +1,4 @@
-# Go Websocket Client
+# GO WebSocket Engine
 ![Coverage](https://img.shields.io/badge/Coverage-95.1%25-brightgreen)
 
 A callback based framework and engine to build websocket clients in Golang, inspired from javax.websocket.
@@ -29,7 +29,14 @@ A callback based framework and engine to build websocket clients in Golang, insp
 Import the websocket engine in your go project:
 
 ```
-go get -u github.com/gbdevw/gowsclient/wscengine
+go get -u github.com/gbdevw/gowse/wscengine
+```
+
+Pick the websocket framework adapter of your choice:
+
+```
+go get -u github.com/gbdevw/gowse/wscengine/wsadapters/gorilla
+go get -u github.com/gbdevw/gowse/wscengine/wsadapters/nhoyr
 ```
 
 ### Callbacks

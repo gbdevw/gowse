@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	wsconnadapter "github.com/gbdevw/gowsclient/wscengine/wsadapters"
+	wsconnadapter "github.com/gbdevw/gowse/wscengine/wsadapters"
 	"github.com/gorilla/websocket"
 )
 
